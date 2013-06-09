@@ -33,21 +33,27 @@ class DataManager(Qt.QObject):
     def get_or_make_leaf(self, path, rank=None, data_tree_args={}, plot_args={}, reduced=False):
         group = self.data.resolve_path(path[:-1])
         if path[-1] not in group:
-            assert rank is not None
-            assert isinstance(group, DataTree)
+            if rank is None:
+                raise ValueError('Path %s not found and rank not specified' % '/'.join(path))
+            if not isinstance(group, DataTree):
+                raise RuntimeError('Trying to add name %s to existing dataset %s' % (path[-1], '/'.join(path[:-1])))
             leaf = group.make_child_leaf(path[-1], rank, **data_tree_args)
             if not isinstance(leaf, DataTreeLeaf):
                 raise ValueError('path does not store a leaf, but rather a ' + str(type(leaf)))
             self.gui.add_tree_widget(path, data=True, save=leaf.save, plot=leaf.plot)
-            if leaf.plot:
+            self.gui.add_plot_widget(path, rank, **plot_args)
+            if not leaf.plot:
+                self.gui.toggle_path(path)
                 #params = {'x0': leaf.x0, 'xscale': leaf.xscale, 'xlabel': leaf.xlabel, 'ylabel': leaf.ylabel}
                 #if rank > 1:
                 #    params.update({'y0': leaf.y0, 'yscale': leaf.yscale, 'zlabel': leaf.zlabel})
-                self.gui.add_plot_widget(path, rank, **plot_args)
         else:
             leaf = group[path[-1]]
             if not isinstance(leaf, DataTreeLeaf):
-                raise ValueError('path does not store a leaf, but rather a ' + str(type(leaf)))
+                self.msg(leaf, type(leaf))
+                raise ValueError('Path %s exists and is not a leaf' % '/'.join(path))
+            if rank is not None and rank != leaf.rank:
+                raise ValueError('Rank of existing leaf %s = %d does not match rank given = %d' % ('/'.join(path), leaf.rank, rank))
             assert (rank is None) or (rank == leaf.rank)
             for key, val in data_tree_args.items():
                 setattr(leaf, key, val)
@@ -69,6 +75,7 @@ class DataManager(Qt.QObject):
     def set_data(self, name_or_path, data, slice=None, parametric=False, **initargs):
         path = helpers.canonicalize_path(name_or_path)
         if parametric and isinstance(data, (np.ndarray, list)):
+            data = np.array(data)
             if data.shape[1] == 2:
                 data = np.transpose(data)
 
@@ -139,11 +146,20 @@ class DataManager(Qt.QObject):
         path = helpers.canonicalize_path(name_or_path)
         node = self.data.resolve_path(path)
         node.attrs[item] = value
+        if node.file is not None:
+            self.msg(node.file, node.path)
+            if isinstance(node, DataTreeLeaf):
+                node.file[node.path[-1]].attrs[item] = value
+            else:
+                node.file.attrs[item] = value
 
     def get_attr(self, name_or_path, item):
+        return self.get_all_attrs(name_or_path)[item]
+
+    def get_all_attrs(self, name_or_path):
         path = helpers.canonicalize_path(name_or_path)
         node = self.data.resolve_path(path)
-        return node.attrs[item]
+        return node.attrs
 
     def update_plot(self, name_or_path, refresh_labels=False, show_most_recent=None, **curve_args):
         path = helpers.canonicalize_path(name_or_path)
@@ -156,7 +172,7 @@ class DataManager(Qt.QObject):
         tree_widget.setText(2, str(item.save))
         tree_widget.setText(3, str(item.plot))
         if item.plot:
-            self.gui.plot_widgets_update_lot[path] = time.time()
+            self.gui.plot_widgets_update_log[path] = time.time()
             if item.rank == 2:
                 self.gui.plot_widgets[path].update_plot(item,
                         refresh_labels=refresh_labels, show_most_recent=show_most_recent, **curve_args)
@@ -165,15 +181,26 @@ class DataManager(Qt.QObject):
         self.gui.update_multiplots(path, item)
 
     def remove_item(self, name_or_path):
+        print 'background.remove_item', name_or_path
         path = helpers.canonicalize_path(name_or_path)
-        group = self.data.resolve_path(path[:-1])
-        del group[path[-1]]
-        self.gui.remove_item(path)
-        n = 2
-        while len(group.keys()) == 1:
-            group = self.data.resolve_path(path[:-n])
-            del group[path[-n]]
-            self.gui.remove_item(path[:-(n-1)])
+        item = self.data.resolve_path(path)
+        if isinstance(item, DataTreeLeaf):
+            print 'A', path
+            name = path[-1]
+            group_path = path[:-1]
+            group = self.data.resolve_path(group_path)
+            del group[name]
+            self.gui.remove_item(path)
+            while group_path and len(group.keys()) == 0:
+                name = group_path[-1]
+                group_path = group_path[:-1]
+                group = self.data.resolve_path(group_path)
+                del group[name]
+                self.gui.remove_item(group_path + (name,))
+        else:
+            print 'C', path
+            for name in item.keys():
+                self.remove_item(path + (name,))
 
     def save_all(self): # TODO
         raise NotImplementedError
@@ -185,7 +212,13 @@ class DataManager(Qt.QObject):
             self.data[filename] = DataTree(self.gui, filename, file=f)
         else:
             self.data[filename] = DataTree(self.gui, filename, open_file=False)
-        self.rec_load_file(f, (filename,), readonly)
+        try:
+            self.rec_load_file(f, (filename,), readonly)
+            for k, v in f.attrs.items():
+                self.data[filename].attrs[k] = v
+        except Exception:
+            self.remove_item(filename)
+            raise
         if readonly:
             f.close()
 
@@ -196,12 +229,17 @@ class DataManager(Qt.QObject):
             if isinstance(ds, h5py.Group):
                 self.msg('recursing', this_path)
                 self.rec_load_file(ds, this_path, readonly)
+                self.data.resolve_path(this_path).load_attrs_from_ds(ds)
             else:
                 parametric = ds.attrs.get('parametric', False)
+                if 0 in ds.shape: # Length 0 arrays are buggy in h5py...
+                    self.msg('Length 0 array %s ignored' % '/'.join(this_path))
+                    continue
                 self.msg('set_data', this_path, type(ds), np.array(ds).shape)
                 self.set_data(this_path, np.array(ds), save=(not readonly), parametric=parametric)
                 self.msg('set_data done', this_path)
-                self.get_or_make_leaf(this_path).load_attrs_from_ds(ds)
+                #self.get_or_make_leaf(this_path).load_attrs_from_ds(ds)
+                self.data.resolve_path(this_path).load_attrs_from_ds(ds)
                 self.update_plot(this_path, refresh_labels=True)
 
     def clear_data(self, path=None, leaf=None):
@@ -220,9 +258,6 @@ class DataManager(Qt.QObject):
     def clear_all_data(self):
         for path, leaf in self.data.leaves():
             self.clear_data(leaf=leaf)
-
-    def _get_dir(self):
-        return dir(self)
 
     def serve(self):
         print 'serving'
@@ -259,7 +294,7 @@ class DataManager(Qt.QObject):
     #    dialog.exec_()
     #    print 'here3'
 
-    def save_as_file(self, path): #TODO
+    def save_as_file(self, path):
         data = self.data.resolve_path(path)
         assert isinstance(data, DataTree)
         assert helpers.valid_h5file(path[-1])
@@ -267,7 +302,7 @@ class DataManager(Qt.QObject):
             for item in data.values():
                 item.save_in_file(f)
 
-    def save_with_file(self, path, filename): #TODO
+    def save_with_file(self, path, filename):
         with h5py.File(filename, 'a') as h5file:
             data = self.data.resolve_path(path)
             f = h5file

@@ -26,20 +26,11 @@ class DataClient(object):
     def __exit__(self, *args):
         self.proxy._pyroRelease()
 
-    def __dir__(self):
-        if self.proxy_closed:
-            return []
-        else:
-            return ['a', 'b']
-            #return self.proxy._get_dir()
-
-
     def __getattr__(self, item):
         def try_proxy_fn(*args, **kwargs):
             if self.proxy_closed:
                 return 'proxy closed'
             try:
-                print item, args, kwargs
                 return getattr(self.proxy, item)(*args, **kwargs)
             except Pyro4.errors.ConnectionClosedError:
                 print "PROXY CLOSED"
@@ -84,7 +75,7 @@ def File(*args, **kwargs):
     return f
 
 
-class RemoteFile(object):
+class RemoteFile:
     """
     Represents a file that resides within an open Dashboard window
 
@@ -206,9 +197,6 @@ class RemoteFile(object):
         else:
             self.manager.save_with_file(path, self.filename)
 
-    def __dir__(self):
-        return dir(self.manager)
-
     def __getattr__(self, item):
         if item is 'attrs':
             return AttrsProxy(self.manager, self.context)
@@ -234,13 +222,13 @@ class AttrsProxy:
         self.manager.set_attr(self.context, item, value)
 
     def __getitem__(self, item):
-        self.manager.get_attr(self.context, item)
+        return self.manager.get_attr(self.context, item)
 
 
 class LocalFile(h5py.File):
     pass
 
-def append_data(file_or_group, dataset_name, new_data):
+def _append_data(file_or_group, dataset_name, new_data):
     new_data = np.array(new_data)
     rank = len(new_data.shape) + 1
     if dataset_name in file_or_group:
@@ -261,5 +249,12 @@ def append_data(file_or_group, dataset_name, new_data):
     elif rank == 3:
         dataset[-1,:,:] = new_data
 
-h5py.File.append_data = append_data
-h5py.Group.append_data = append_data
+h5py.File.append_data = _append_data
+h5py.Group.append_data = _append_data
+
+def _flush(ds_or_group):
+    ds_or_group.file.flush()
+
+h5py.Group.flush = _flush
+h5py.Dataset.flush = _flush
+

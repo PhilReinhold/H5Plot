@@ -263,17 +263,27 @@ class PlotWindow(SlabWindow):
         self.remove_button.setEnabled(remove)
         self.parametric_button.setEnabled(parametric)
 
-    def remove_selection(self): #TODO
+    def remove_selection(self):
         for item in self.structure_tree.selectedItems():
+            # This is a little complicated. We need to remove the data from the background.
+            # Removing it from the background, however, can also be done through a client.
+            # Removing it from a client should trigger removal of the plots from the window.
+            # Therefore, the chain of control in this command is
+            # Window.remove_selection --> Background.remove_item --> Window.remove_item
+            # Sorry.
             self.background_client.remove_item(item.path)
 
     def remove_item(self, path):
         item = self.tree_widgets[path]
         if item.is_leaf():
+            print 'window.remove_item', path
             widget = self.plot_widgets.pop(item.path)
             if widget.visible:
                 widget.toggle_hide()
             widget.close()
+        #else:
+        #    for child in item.getChildren():
+        #        self.background_client.remove_item(child.path)
         root = self.structure_tree.invisibleRootItem()
         (item.parent() or root).removeChild(item)
 
@@ -302,6 +312,9 @@ class PlotWindow(SlabWindow):
 
         self.tree_widgets[path] = item
 
+    def toggle_path(self, path):
+        self.toggle_item(self.tree_widgets[path], 0)
+
     def toggle_item(self, item, col):
         if item.is_leaf():# and item.plot:
             widget = self.plot_widgets[item.path]
@@ -313,18 +326,16 @@ class PlotWindow(SlabWindow):
                 self.toggle_item(child, col)
 
     def change_edit_widget(self, item, col):
+        if self.current_edit_widget is not None:
+            self.sidebar.layout().removeWidget(self.current_edit_widget)
+            self.current_edit_widget.setParent(None)
         if item.is_leaf():
-            if self.current_edit_widget is not None:
-                self.sidebar.layout().removeWidget(self.current_edit_widget)
-                self.current_edit_widget.setParent(None)
             leaf = self.background_client.get_or_make_leaf(item.path, reduced=True)
             self.current_edit_widget = LeafEditWidget(leaf)
-            self.sidebar.layout().addWidget(self.current_edit_widget)
-
-            def update_fn():
-                params = self.current_edit_widget.to_dict()
-                self.background_client.set_params(leaf.path, leaf.rank, **params)
-            self.current_edit_widget.commit_button.clicked.connect(update_fn)
+        else:
+            attrs = self.background_client.get_all_attrs(item.path)
+            self.current_edit_widget = NodeEditWidget(item.path, attrs)
+        self.sidebar.layout().addWidget(self.current_edit_widget)
 
     def add_plot_widget(self, path, rank=1, **kwargs):
         if path in self.plot_widgets:

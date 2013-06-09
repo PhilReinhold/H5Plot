@@ -78,6 +78,7 @@ def target():
     cov = coverage(data_suffix='window')
     cov.start()
     from main import main
+    print 'about to start main'
     main(coverage=True)
     cov.stop()
     cov.save()
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         os.remove(r'S:\Phil\some_file.h5')
     p = multiprocessing.Process(target=target)
     p.start()
-    time.sleep(2)
+    time.sleep(5)
 
     test_file_interface()
     test_gui_elements(interactive=interactive)
