@@ -91,9 +91,9 @@ if __name__ == "__main__":
     interactive = True
     if os.path.exists(r'S:\Phil\some_file.h5'):
         os.remove(r'S:\Phil\some_file.h5')
-    p = multiprocessing.Process(target=target)
-    p.start()
-    time.sleep(5)
+    #p = multiprocessing.Process(target=target)
+    #p.start()
+    #time.sleep(5)
 
     test_file_interface()
     test_gui_elements(interactive=interactive)

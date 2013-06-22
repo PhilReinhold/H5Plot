@@ -41,7 +41,7 @@ def project(cube):
 
 
 if __name__ == "__main__":
-    from Pachyderm import RemoteFile
+    from H5Plot import RemoteFile
     from time import sleep
 
     test_cube()

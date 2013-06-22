@@ -1,0 +1,7 @@
+*.pyc
+*.log
+.coverage*
+.idea/
+dist/
+build/
+
