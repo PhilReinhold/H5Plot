@@ -102,6 +102,11 @@ class RemoteFile:
             self.context = (filename,)
         else:
             self.context = context
+            
+    def __repr__(self):
+        filestr = 'to ' + self.filename if self.filename else ''
+        ctxstr = ', with context ' + ', '.join(self.context) if self.context else ''
+        return '<RemoteFile %s%s>' % (filestr, ctxstr)
 
     def __enter__(self):
         return self
