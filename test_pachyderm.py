@@ -9,14 +9,13 @@ import numpy as np
 import multiprocessing
 
 def test_file_interface(remote=True):
-    f = File(filename=r"S:\Phil\some_file.h5", remote=remote)
+    f = File(filename=r"C:\Users\rsl\Documents\Phil\some_file.h5", remote=remote)
     x = np.linspace(0, 3, 50)
     f['do not plot'].set_data((x, np.sin(x)), plot=False)
     f['do not plot'].attrs['function'] = 'sine'
     f['do not save'].set_data((x, np.cos(x)), save=False, color='b')
     f['test group']['test ds'] = np.tan(np.arange(50))
     f['test group']['test img'] = np.outer(np.sin(x), np.cos(x))
-    f['very loooooooooooooooooooong group name']['ds'] = np.sin(x)
     f['test group']['test img'].set_range(x0=1, xscale=.02, y0=2, yscale=.02)
     f['test group']['test img'].set_labels(xlabel='XLABEL?', ylabel='ylabel...', zlabel='Something?')
     #f['parametric (implicit)'] = (x*np.sin(x), x*np.cos(x))

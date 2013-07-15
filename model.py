@@ -124,8 +124,6 @@ class DataTreeLeaf(object):
         self.ylabel = ylabel
         self.zlabel = zlabel
 
-        print self.path, self.rank, self.parametric #, self.data.shape
-
     def save_in_file(self, file_or_group=None):
         if self.data is None:
             return
