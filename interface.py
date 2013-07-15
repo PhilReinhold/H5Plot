@@ -1,6 +1,7 @@
 import sys
 import os
 import inspect
+import time
 
 import numpy as np
 import Pyro4
@@ -95,12 +96,13 @@ class RemoteFile:
             print 'Warning', ', '.join(ignoredargs.keys()), 'ignored in call to SlabFileRemote'
         if manager is None:
             self.manager = DataClient()
-            self.data_conn = zmq.Context().socket(zmq.PUB)
-            self.zmq_addr = 'tcp://127.0.0.1:5558'
-            self.data_conn.bind(self.zmq_addr)
-            print 'G'
+            self.data_ctx = zmq.Context()
+            self.data_conn = self.data_ctx.socket(zmq.PUB)
+            addr = 'tcp://127.0.0.1'
+            port = self.data_conn.bind_to_random_port(addr, min_port=5555, max_port=5575, max_tries=30)
+            self.zmq_addr = addr + ':' + str(port)
             self.manager.connect_zmq(self.zmq_addr)
-            print 'H'
+            time.sleep(.1) # If the background hasn't connected, data could be dropped!
             if filename and os.path.exists(filename):
                 self.manager.load_h5file(filename)
         else:
@@ -125,7 +127,7 @@ class RemoteFile:
 
     def close(self):
         self.manager._pyroRelease()
-        self.data_conn.close()
+        self.data_ctx.destroy()
 
 
     def create_dataset(self, name, data=None, shape=None, **initargs):
@@ -185,13 +187,9 @@ class RemoteFile:
         pass
 
     def _send_array(self, array, mode, key=None, slice=None):
-        print 'A'
         context = self.context + (key,) if key else self.context
-        print 'B'
         self.data_conn.send(array)
-        print 'C'
         self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice)
-        print 'D'
 
     def __getitem__(self, key):
         if isinstance(key, str):
@@ -203,11 +201,8 @@ class RemoteFile:
 
     def __setitem__(self, key, value):
         if isinstance(key, str):
-            #context = self.context + (key,)
-            #self.manager.set_data(context, value)
             self._send_array(value, 'set', key=key)
         elif isinstance(key, (int, slice, tuple)):
-            #self.manager.set_data(self.context, value, slice=key)
             self._send_array(value, 'set', slice=key)
         else:
             raise ValueError('Unknown key type ' + str(key))

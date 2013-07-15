@@ -28,20 +28,18 @@ class DataManager(Qt.QObject):
         self.data_conns = {}
 
     def connect_zmq(self, addr):
-        self.msg('connecting to '+addr)
         sock = self.zmq_ctx.socket(zmq.SUB)
-        self.msg('A')
         sock.connect(addr)
-        self.msg('B')
         sock.setsockopt(zmq.SUBSCRIBE, '')
-        self.msg('C')
         self.data_conns[addr] = sock
-        self.msg('D')
 
     def receive_data(self, addr, dtype, shape, mode, path, slice=None):
-        data = self.data_conns[addr].recv()
+        if self.data_conns[addr].poll(timeout=1000):
+            data = self.data_conns[addr].recv()
+        else:
+            raise EnvironmentError('Unable to receive data over socket ' + repr(self.data_conns[addr]))
         arr = np.frombuffer(buffer(data), dtype)
-        arr.reshape(shape)
+        arr.resize(shape)
         if mode == 'append':
             self.append_data(path, arr)
         elif mode == 'set':
@@ -210,7 +208,6 @@ class DataManager(Qt.QObject):
         path = helpers.canonicalize_path(name_or_path)
         item = self.data.resolve_path(path)
         if isinstance(item, DataTreeLeaf):
-            print 'A', path
             name = path[-1]
             group_path = path[:-1]
             group = self.data.resolve_path(group_path)
@@ -223,7 +220,6 @@ class DataManager(Qt.QObject):
                 del group[name]
                 self.gui.remove_item(group_path + (name,))
         else:
-            print 'C', path
             for name in item.keys():
                 self.remove_item(path + (name,))
 
