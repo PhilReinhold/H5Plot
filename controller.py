@@ -4,6 +4,7 @@ from PyQt4 import Qt
 import h5py
 import Pyro4
 import numpy as np
+import zmq
 
 from model import DataTree, DataTreeLeaf, DataTreeLeafReduced
 import helpers
@@ -23,6 +24,30 @@ class DataManager(Qt.QObject):
         self.coverage = False
         self.gui = None
         self.params = {}
+        self.zmq_ctx = zmq.Context()
+        self.data_conns = {}
+
+    def connect_zmq(self, addr):
+        self.msg('connecting to '+addr)
+        sock = self.zmq_ctx.socket(zmq.SUB)
+        self.msg('A')
+        sock.connect(addr)
+        self.msg('B')
+        sock.setsockopt(zmq.SUBSCRIBE, '')
+        self.msg('C')
+        self.data_conns[addr] = sock
+        self.msg('D')
+
+    def receive_data(self, addr, dtype, shape, mode, path, slice=None):
+        data = self.data_conns[addr].recv()
+        arr = np.frombuffer(buffer(data), dtype)
+        arr.reshape(shape)
+        if mode == 'append':
+            self.append_data(path, arr)
+        elif mode == 'set':
+            self.set_data(path, arr, slice=slice)
+        else:
+            raise ValueError('invalid mode: ' + repr(mode))
 
     def set_param(self, name, value):
         self.params[name] = value

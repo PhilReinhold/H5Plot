@@ -7,6 +7,8 @@ import Pyro4
 import traceback
 import h5py
 
+import zmq
+
 import helpers
 import config
 
@@ -82,7 +84,7 @@ class RemoteFile:
     Method calls are deferred to py:class::controller.DataManager calls i.e.
     f['group']['dataset'].some_method(1,2,3) ==> DataManager.some_method(('group', 'dataset'), 1, 2, 3)
     """
-    def __init__(self, filename=None, manager=None, context=(), **ignoredargs):
+    def __init__(self, filename=None, manager=None, data_conn=None, context=(), **ignoredargs):
         """
         :param filename: A absolute or relative path specifying a *.h5 file to save data to.
                          If not provided, data will not be explicitly saved.
@@ -93,10 +95,17 @@ class RemoteFile:
             print 'Warning', ', '.join(ignoredargs.keys()), 'ignored in call to SlabFileRemote'
         if manager is None:
             self.manager = DataClient()
+            self.data_conn = zmq.Context().socket(zmq.PUB)
+            self.zmq_addr = 'tcp://127.0.0.1:5558'
+            self.data_conn.bind(self.zmq_addr)
+            print 'G'
+            self.manager.connect_zmq(self.zmq_addr)
+            print 'H'
             if filename and os.path.exists(filename):
                 self.manager.load_h5file(filename)
         else:
             self.manager = manager
+            self.data_conn = data_conn
         self.filename = filename
         if context == () and filename is not None:
             self.context = (filename,)
@@ -116,6 +125,8 @@ class RemoteFile:
 
     def close(self):
         self.manager._pyroRelease()
+        self.data_conn.close()
+
 
     def create_dataset(self, name, data=None, shape=None, **initargs):
         """
@@ -173,9 +184,18 @@ class RemoteFile:
         """
         pass
 
+    def _send_array(self, array, mode, key=None, slice=None):
+        print 'A'
+        context = self.context + (key,) if key else self.context
+        print 'B'
+        self.data_conn.send(array)
+        print 'C'
+        self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice)
+        print 'D'
+
     def __getitem__(self, key):
         if isinstance(key, str):
-            return RemoteFile(self.filename, self.manager, self.context + (key,))
+            return RemoteFile(self.filename, self.manager, self.data_conn, self.context + (key,))
         elif isinstance(key, (int, slice, tuple)):
             return self.manager.get_data(self.context, key)
         else:
@@ -183,10 +203,12 @@ class RemoteFile:
 
     def __setitem__(self, key, value):
         if isinstance(key, str):
-            context = self.context + (key,)
-            self.manager.set_data(context, value)
+            #context = self.context + (key,)
+            #self.manager.set_data(context, value)
+            self._send_array(value, 'set', key=key)
         elif isinstance(key, (int, slice, tuple)):
-            self.manager.set_data(self.context, value, slice=key)
+            #self.manager.set_data(self.context, value, slice=key)
+            self._send_array(value, 'set', slice=key)
         else:
             raise ValueError('Unknown key type ' + str(key))
 
