@@ -33,17 +33,19 @@ class DataManager(Qt.QObject):
         sock.setsockopt(zmq.SUBSCRIBE, '')
         self.data_conns[addr] = sock
 
-    def receive_data(self, addr, dtype, shape, mode, path, slice=None):
+    def receive_data(self, addr, dtype, shape, mode, path, slice=None, modeargs=None):
+        if modeargs is None:
+            modeargs = {}
         if self.data_conns[addr].poll(timeout=1000):
-            data = self.data_conns[addr].recv(copy=False, track=False)
+            data = self.data_conns[addr].recv(copy=True, track=False)
         else:
             raise EnvironmentError('Unable to receive data over socket ' + repr(self.data_conns[addr]))
         arr = np.frombuffer(buffer(data), dtype)
         arr.resize(shape)
         if mode == 'append':
-            self.append_data(path, arr)
+            self.append_data(path, arr, **modeargs)
         elif mode == 'set':
-            self.set_data(path, arr, slice=slice)
+            self.set_data(path, arr, slice=slice, **modeargs)
         else:
             raise ValueError('invalid mode: ' + repr(mode))
 

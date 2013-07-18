@@ -85,7 +85,7 @@ class RemoteFile:
     Method calls are deferred to py:class::controller.DataManager calls i.e.
     f['group']['dataset'].some_method(1,2,3) ==> DataManager.some_method(('group', 'dataset'), 1, 2, 3)
     """
-    def __init__(self, filename=None, manager=None, data_conn=None, context=(), **ignoredargs):
+    def __init__(self, filename=None, manager=None, data_conn=None, zmq_addr=None, context=(), **ignoredargs):
         """
         :param filename: A absolute or relative path specifying a *.h5 file to save data to.
                          If not provided, data will not be explicitly saved.
@@ -108,6 +108,8 @@ class RemoteFile:
         else:
             self.manager = manager
             self.data_conn = data_conn
+            self.data_ctx = data_conn.context
+            self.zmq_addr = zmq_addr
         self.filename = filename
         if context == () and filename is not None:
             self.context = (filename,)
@@ -186,14 +188,20 @@ class RemoteFile:
         """
         pass
 
-    def _send_array(self, array, mode, key=None, slice=None):
+    def _send_array(self, array, mode, key=None, slice=None, modeargs=None):
         context = self.context + (key,) if key else self.context
-        self.data_conn.send(array, copy=False, track=False)
-        self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice)
+        self.data_conn.send(array, copy=True, track=False)
+        self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice, modeargs)
+
+    def append_data(self, data, **kwargs):
+        if isinstance(data, np.ndarray):
+            self._send_array(data, 'append', modeargs=kwargs)
+        else:
+            self.manager.append_data(self.context, data, **kwargs)
 
     def __getitem__(self, key):
         if isinstance(key, str):
-            return RemoteFile(self.filename, self.manager, self.data_conn, self.context + (key,))
+            return RemoteFile(self.filename, self.manager, self.data_conn, self.zmq_addr, self.context + (key,))
         elif isinstance(key, (int, slice, tuple)):
             return self.manager.get_data(self.context, key)
         else:
