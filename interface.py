@@ -188,7 +188,7 @@ class RemoteFile:
 
     def _send_array(self, array, mode, key=None, slice=None):
         context = self.context + (key,) if key else self.context
-        self.data_conn.send(array)
+        self.data_conn.send(array, copy=False, track=False)
         self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice)
 
     def __getitem__(self, key):

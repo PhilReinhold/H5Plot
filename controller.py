@@ -35,7 +35,7 @@ class DataManager(Qt.QObject):
 
     def receive_data(self, addr, dtype, shape, mode, path, slice=None):
         if self.data_conns[addr].poll(timeout=1000):
-            data = self.data_conns[addr].recv()
+            data = self.data_conns[addr].recv(copy=False, track=False)
         else:
             raise EnvironmentError('Unable to receive data over socket ' + repr(self.data_conns[addr]))
         arr = np.frombuffer(buffer(data), dtype)
