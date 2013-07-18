@@ -7,7 +7,11 @@ os.environ["PATH"] =  \
     os.environ["PATH"] + \
     os.path.pathsep + os.path.split(zmq.__file__)[0]
 
-windows = [{'script':'main.py', 'icon_resources':[(0, 'plot.ico')]}]
+windows = [{
+               'script': 'main.py',
+               'icon_resources': [(0, 'plot.ico')],
+               'dest_base': 'H5Plot'
+           }]
 #setup(console=['launcher.py'], options={'py2exe':{'includes':['sip']}})
 setup(windows=windows, options={'py2exe':
                                     {'includes':

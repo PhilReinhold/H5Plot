@@ -45,7 +45,7 @@ if __name__ == "__main__":
     from time import sleep
 
     test_cube()
-    f = RemoteFile('cube.h5')
+    f = RemoteFile('cube_test.h5')
     cube_dim = None
     axis = ones(8)
     f.attrs['n'] = 3
