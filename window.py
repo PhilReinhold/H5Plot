@@ -210,7 +210,7 @@ class PlotWindow(SlabWindow):
 
     def save_selection(self):
         selection = self.structure_tree.selectedItems()
-        if len(selection) == 1 and helpers.valid_h5file(selection[0].text(0)):
+        if len(selection) == 1 and helpers.valid_h5file(str(selection[0].text(0))):
             self.background_client.save_as_file(selection[0].path)
         else:
             filename = str(Qt.QFileDialog.getSaveFileName(self, "Destination File",

@@ -215,10 +215,12 @@ class DataManager(Qt.QObject):
             group = self.data.resolve_path(group_path)
             del group[name]
             self.gui.remove_item(path)
+            # If removing this item leaves parent groups childless, remove them too-
             while group_path and len(group.keys()) == 0:
                 name = group_path[-1]
                 group_path = group_path[:-1]
                 group = self.data.resolve_path(group_path)
+                group[name].close()
                 del group[name]
                 self.gui.remove_item(group_path + (name,))
         else:

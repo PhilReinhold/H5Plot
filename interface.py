@@ -92,6 +92,7 @@ class RemoteFile:
         :param manager: Used internally to avoid re-creating DataClient connection
         :param context: Used internally to represent base-path
         """
+        filename = os.path.abspath(filename)
         if len(ignoredargs) > 0:
             print 'Warning', ', '.join(ignoredargs.keys()), 'ignored in call to SlabFileRemote'
         if manager is None:
