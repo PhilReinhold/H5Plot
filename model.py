@@ -1,4 +1,6 @@
 import h5py
+import h5py._errors
+
 from collections import defaultdict
 import helpers
 
@@ -21,6 +23,7 @@ class keydefaultdict(defaultdict):
 class DataTree(keydefaultdict):
     def __init__(self, gui, name=None, parentpath=(), file=None, open_file=True):
         if open_file and (name is not None) and (file is None) and helpers.valid_h5file(name):
+            h5py._errors.silence_errors()
             file = h5py.File(name, 'a')
         self.file = file
         if name is None:

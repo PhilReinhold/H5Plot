@@ -278,12 +278,13 @@ class PlotWindow(SlabWindow):
         if item.is_leaf():
             print 'window.remove_item', path
             widget = self.plot_widgets.pop(item.path)
-            if widget.visible:
-                widget.toggle_hide()
+            #widget = self.plot_widgets[item.path]
+            #if widget.visible:
+            #    widget.toggle_hide()
+            widget.visible = False
             widget.close()
-        #else:
-        #    for child in item.getChildren():
-        #        self.background_client.remove_item(child.path)
+            widget.destroy()
+
         root = self.structure_tree.invisibleRootItem()
         (item.parent() or root).removeChild(item)
 
