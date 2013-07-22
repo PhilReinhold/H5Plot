@@ -105,3 +105,5 @@ def canonicalize_path(name_or_path):
         path = tuple(name_or_path)
     return path
 
+def linterp(x, x0, x1, y0, y1):
+    return y0 + (x - x0) * (y1 - y0) / (x1 - x0)

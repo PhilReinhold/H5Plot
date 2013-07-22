@@ -463,11 +463,20 @@ class CrossSectionWidget(pg.ImageView):
     def handle_mouse_move(self, mouse_event):
         if self.cross_section_enabled and self.search_mode:
             view_coords = self.imageItem.getViewBox().mapSceneToView(mouse_event)
-            self.h_line.setPos(view_coords.y())
-            self.v_line.setPos(view_coords.x())
+            view_x, view_y = view_coords.x(), view_coords.y()
+            item_coords = self.imageItem.mapFromScene(mouse_event)
+            item_x, item_y = item_coords.x(), item_coords.y()
             max_x, max_y = self.imageItem.image.shape
-            self.x_cross_index = max(min(int(view_coords.x()), max_x-1), 0)
-            self.y_cross_index = max(min(int(view_coords.y()), max_y-1), 0)
+            if item_x < 0 or item_x > max_x or item_y < 0 or item_y > max_y:
+                return
+            self.v_line.setPos(view_x)
+            self.h_line.setPos(view_y)
+            #(min_view_x, max_view_x), (min_view_y, max_view_y) = self.imageItem.getViewBox().viewRange()
+            #idx_x = helpers.linterp(view_coords.x(), min_view_x, max_view_x, 0, max_x)
+            #idx_y = helpers.linterp(view_coords.y(), min_view_y, max_view_y, 0, max_y)
+            #print view_coords.x(), min_view_x, max_view_x, max_x, idx_x
+            self.x_cross_index = max(min(int(item_x), max_x-1), 0)
+            self.y_cross_index = max(min(int(item_y), max_y-1), 0)
             self.update_cross_section()
 
     def update_cross_section(self):
