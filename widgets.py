@@ -31,10 +31,15 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
         pyqtgraph.dockarea.DockArea.__init__(self, *args, **kwargs)
         self.insert_location = 'bottom'
+        self.last_dock = None
 
     def add_dock_auto_location(self, dock):
-        self.addDock(dock, self.insert_location)
+        if self.insert_location == 'right':
+            self.addDock(dock, self.insert_location, self.last_dock)
+        else:
+            self.addDock(dock, self.insert_location)
         self.insert_location = {'bottom':'right', 'right':'bottom'}[self.insert_location]
+        self.last_dock = dock
 
 class NodeEditWidget(Qt.QFrame):
     def __init__(self, path, attrs):
