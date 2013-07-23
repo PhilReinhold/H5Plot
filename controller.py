@@ -100,7 +100,7 @@ class DataManager(Qt.QObject):
     def set_data(self, name_or_path, data, slice=None, **initargs):
         path = helpers.canonicalize_path(name_or_path)
         data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
-        parametric = data_tree_args['parametric']
+        parametric = data_tree_args.get('parametric', False)
 
         if parametric and isinstance(data, (np.ndarray, list)):
             data = np.array(data)
@@ -131,7 +131,7 @@ class DataManager(Qt.QObject):
     def append_data(self, name_or_path, data, show_most_recent=None, **initargs):
         path = helpers.canonicalize_path(name_or_path)
         data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
-        parametric = data_tree_args['parametric']
+        parametric = data_tree_args.get('parametric', False)
 
         if parametric or isinstance(data, tuple):
             parametric = True
