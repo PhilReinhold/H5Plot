@@ -97,23 +97,23 @@ class DataManager(Qt.QObject):
             leaf.save_in_file()
         self.update_plot(path, refresh_labels=True, **curve_args)
 
-    def set_data(self, name_or_path, data, slice=None, parametric=False, **initargs):
+    def set_data(self, name_or_path, data, slice=None, **initargs):
         path = helpers.canonicalize_path(name_or_path)
+        data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
+        parametric = data_tree_args['parametric']
+
         if parametric and isinstance(data, (np.ndarray, list)):
             data = np.array(data)
             if data.shape[1] == 2:
                 data = np.transpose(data)
 
         if parametric or isinstance(data, tuple):
-            parametric = True
+            data_tree_args['parametric'] = True
             rank = len(data) - 1
             data = np.array(data)
         else:
             data = np.array(data)
             rank = len(data.shape)
-
-        data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
-        data_tree_args['parametric'] = parametric
 
         if slice is None:
             leaf = self.get_or_make_leaf(path, rank, data_tree_args, plot_args)
@@ -128,8 +128,10 @@ class DataManager(Qt.QObject):
         self.update_plot(name_or_path, refresh_labels=(len(initargs) > 0), **curve_args)
         return ()
 
-    def append_data(self, name_or_path, data, show_most_recent=None, parametric=False, **initargs):
+    def append_data(self, name_or_path, data, show_most_recent=None, **initargs):
         path = helpers.canonicalize_path(name_or_path)
+        data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
+        parametric = data_tree_args['parametric']
 
         if parametric or isinstance(data, tuple):
             parametric = True
@@ -139,8 +141,6 @@ class DataManager(Qt.QObject):
             data = np.array(data)
             rank = len(data.shape) + 1
 
-        data_tree_args, plot_args, curve_args = helpers.separate_init_args(initargs)
-        data_tree_args['parametric'] = parametric
         leaf = self.get_or_make_leaf(path, rank, data_tree_args, plot_args)
 
         if leaf.data is None:

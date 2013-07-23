@@ -51,6 +51,14 @@ def separate_init_args(initargs):
     curve_args = ['pen', 'shadowPen', 'fillLevel', 'fillBrush', 'symbol',
                   'symbolPen', 'symbolBrush', 'symbolSize', 'pxMode', 'antialias', 'decimate', 'name']
 
+    if 'scatter' in initargs:
+        if initargs['scatter']:
+            initargs['parametric'] = True
+            initargs['pen'] = None
+            initargs['symbolPen'] = None
+            initargs['symbol'] = 't'
+        del initargs['scatter']
+
     pen_dict = take_items(initargs, pen_args)
     if len(pen_dict) > 0 and 'pen' not in initargs:
         initargs['pen'] = pyqtgraph.mkPen(**pen_dict)
