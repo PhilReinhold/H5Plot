@@ -12,10 +12,13 @@ import h5py._conv
 
 from PyQt4 import Qt
 from window import PlotWindow
+import time
 
 #import pyqtgraph
 #pyqtgraph.setConfigOption('background', 'w')
 #pyqtgraph.setConfigOption('foreground', 'k')
+LAST_ERROR_WINDOW_TIME = None
+INTER_ERROR_TIME = 30
 
 # http://www.riverbankcomputing.com/pipermail/pyqt/2009-May/022961.html
 def excepthook(excType, excValue, tracebackobj):
@@ -30,6 +33,7 @@ def excepthook(excType, excValue, tracebackobj):
     logFile = "datamanagement.log"
     notice = \
         """An unhandled exception occurred. Please report the problem\n""" \
+        """Error reporting has been silenced for the next 30s. To see all errors check the log\n""" \
         """A log has been written to "%s".\n\nError information:\n""" % (logFile)
     versionInfo="0.0.1"
     timeString = time.strftime("%Y-%m-%d, %H:%M:%S")
@@ -49,9 +53,13 @@ def excepthook(excType, excValue, tracebackobj):
         f.close()
     except IOError:
         pass
-    errorbox = Qt.QMessageBox()
-    errorbox.setText(str(notice)+str(msg)+str(versionInfo))
-    errorbox.exec_()
+    cur_time = time.time()
+    global LAST_ERROR_WINDOW_TIME, INTER_ERROR_TIME
+    if LAST_ERROR_WINDOW_TIME is None or cur_time - LAST_ERROR_WINDOW_TIME > INTER_ERROR_TIME:
+        LAST_ERROR_WINDOW_TIME = cur_time
+        errorbox = Qt.QMessageBox()
+        errorbox.setText(str(notice)+str(msg)+str(versionInfo))
+        errorbox.exec_()
 
 def main(coverage=False):
     sys.excepthook = excepthook
