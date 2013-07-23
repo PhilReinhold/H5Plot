@@ -231,6 +231,8 @@ class DataManager(Qt.QObject):
         raise NotImplementedError
 
     def load_h5file(self, filename, readonly=False):
+        if filename in self.data:
+            return
         mode = 'r' if readonly else 'a'
         f = h5py.File(filename, mode)
         if not readonly:
