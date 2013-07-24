@@ -191,6 +191,8 @@ class RemoteFile:
         pass
 
     def _send_array(self, array, mode, key=None, slice=None, modeargs=None):
+        if isinstance(array, list):
+            array = np.array(array)
         context = self.context + (key,) if key else self.context
         self.data_conn.send(array, copy=False, track=False)
         self.manager.receive_data(self.zmq_addr, str(array.dtype), array.shape, mode, context, slice, modeargs)
