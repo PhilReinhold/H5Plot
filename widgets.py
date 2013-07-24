@@ -358,8 +358,11 @@ class Rank2ItemWidget(Rank1ItemWidget):
             if refresh_labels:
                 self.img_view.setLabels(leaf.xlabel, leaf.ylabel, leaf.zlabel)
             Rank1ItemWidget.update_plot(self, leaf.to_rank1())
-            self.img_view.imageItem.show()
-            self.img_view.setImage(leaf.data, pos=[leaf.x0, leaf.y0], scale=[leaf.xscale, leaf.yscale])
+            # self.img_view.imageItem.show()
+            # Well, this is a hack. I'm not sure why autorange is disabled after setImage
+            autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
+            self.img_view.setImage(leaf.data, autoRange=autorange, pos=[leaf.x0, leaf.y0], scale=[leaf.xscale, leaf.yscale])
+            self.img_view.getView().vb.enableAutoRange(enable=autorange)
             if leaf.data.shape[0] == 1:
                 self.show_recent()
 
