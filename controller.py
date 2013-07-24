@@ -9,51 +9,17 @@ import zmq
 from model import DataTree, DataTreeLeaf, DataTreeLeafReduced
 import helpers
 import config
+from data_server import send_array, recv_array
 
-#Pyro4.config.COMMTIMEOUT = 3.5
-#Pyro4.config.DOTTEDNAMES = True
-Pyro4.config.SERVERTYPE = 'multiplex'
-Pyro4.config.ONEWAY_THREADED = True
 RUNNING = True
 
 class DataManager(Qt.QObject):
-    def __init__(self, path_delim='/'):
+    def __init__(self):
         Qt.QObject.__init__(self)
-        self.data = None
-        self.delim = path_delim
-        self.coverage = False
+        self.data = {}
+        #self.delim = path_delim
+        #self.coverage = False
         self.gui = None
-        self.params = {}
-        self.zmq_ctx = zmq.Context()
-        self.data_conns = {}
-
-    def connect_zmq(self, addr):
-        sock = self.zmq_ctx.socket(zmq.SUB)
-        sock.connect(addr)
-        sock.setsockopt(zmq.SUBSCRIBE, '')
-        self.data_conns[addr] = sock
-
-    def receive_data(self, addr, dtype, shape, mode, path, slice=None, modeargs=None):
-        if modeargs is None:
-            modeargs = {}
-        if self.data_conns[addr].poll(timeout=1000):
-            data = self.data_conns[addr].recv(copy=False, track=False)
-        else:
-            raise EnvironmentError('Unable to receive data over socket ' + repr(self.data_conns[addr]))
-        arr = np.frombuffer(buffer(data), dtype)
-        arr.resize(shape)
-        if mode == 'append':
-            self.append_data(path, arr, **modeargs)
-        elif mode == 'set':
-            self.set_data(path, arr, slice=slice, **modeargs)
-        else:
-            raise ValueError('invalid mode: ' + repr(mode))
-
-    def set_param(self, name, value):
-        self.params[name] = value
-
-    def _connect_data(self):
-        self.data = DataTree(self.gui)
 
     def get_or_make_leaf(self, path, rank=None, data_tree_args={}, plot_args={}, reduced=False):
         group = self.data.resolve_path(path[:-1])
@@ -227,48 +193,6 @@ class DataManager(Qt.QObject):
             for name in item.keys():
                 self.remove_item(path + (name,))
 
-    def save_all(self): # TODO
-        raise NotImplementedError
-
-    def load_h5file(self, filename, readonly=False):
-        if filename in self.data:
-            return
-        mode = 'r' if readonly else 'a'
-        f = h5py.File(filename, mode)
-        if not readonly:
-            self.data[filename] = DataTree(self.gui, filename, file=f)
-        else:
-            self.data[filename] = DataTree(self.gui, filename, open_file=False)
-        try:
-            self.rec_load_file(f, (filename,), readonly)
-            for k, v in f.attrs.items():
-                self.data[filename].attrs[k] = v
-        except Exception:
-            self.remove_item(filename)
-            raise
-        if readonly:
-            f.close()
-
-    def rec_load_file(self, file, path, readonly):
-        for name, ds in file.items():
-            this_path = path + (name,)
-            self.msg(name, type(ds))
-            if isinstance(ds, h5py.Group):
-                self.msg('recursing', this_path)
-                self.rec_load_file(ds, this_path, readonly)
-                self.data.resolve_path(this_path).load_attrs_from_ds(ds)
-            else:
-                parametric = ds.attrs.get('parametric', False)
-                if 0 in ds.shape: # Length 0 arrays are buggy in h5py...
-                    self.msg('Length 0 array %s ignored' % '/'.join(this_path))
-                    continue
-                self.msg('set_data', this_path, type(ds), np.array(ds).shape)
-                self.set_data(this_path, np.array(ds), save=(not readonly), parametric=parametric)
-                self.msg('set_data done', this_path)
-                #self.get_or_make_leaf(this_path).load_attrs_from_ds(ds)
-                self.data.resolve_path(this_path).load_attrs_from_ds(ds)
-                self.update_plot(this_path, refresh_labels=True)
-
     def clear_data(self, path=None, leaf=None):
         assert path is not None or leaf is not None
         if leaf is None:
@@ -292,11 +216,31 @@ class DataManager(Qt.QObject):
             from coverage import coverage
             cov = coverage(data_suffix='manager')
             cov.start()
-        with Pyro4.Daemon(host=config.manager_host, port=config.manager_port) as d:
-            global RUNNING
-            self.running = True
-            d.register(self, config.manager_id)
-            d.requestLoop(lambda: RUNNING)
+
+        listen_socket = self.zmq_ctx.socket(zmq.SUB)
+        listen_socket.setsockopt(zmq.SUBSCRIBE, '')
+        listen_socket.connect('tcp://127.0.0.1:7677')
+        global RUNNING
+        while RUNNING:
+            data_patch = {}
+            attrs_patch = {}
+            while listen_socket.poll():
+                json = listen_socket.recv_json()
+                if 'attrs' in json:
+                    attrs_patch[json['path']] = json['attrs']
+                else:
+                    data = recv_array(listen_socket)
+                    data_patch[json['path']] = data
+            self.data.update(data_patch)
+            self.attrs.update(attrs_patch)
+
+
+
+        #with Pyro4.Daemon(host=config.manager_host, port=config.manager_port) as d:
+        #    global RUNNING
+        #    self.running = True
+        #    d.register(self, config.manager_id)
+        #    d.requestLoop(lambda: RUNNING)
         print 'done serving'
         self.data.close()
         print "data closed"
