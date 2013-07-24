@@ -129,6 +129,15 @@ class LeafEditWidget(NodeEditWidget):
     param_attrs = ['x0', 'y0', 'xscale', 'yscale', 'xlabel', 'ylabel', 'zlabel', 'parametric']
     def __init__(self, leaf):
         NodeEditWidget.__init__(self, leaf.path, leaf.attrs)
+        self.params_box = Qt.QWidget()
+        self.params_box.setLayout(Qt.QGridLayout())
+        for i, name in enumerate(self.param_attrs):
+            row, column = int(i / 4), i % 4
+            button = Qt.QPushButton(name)
+            # Gah, lexical scoping!
+            button.clicked.connect((lambda n: (lambda: self.attr_name_edit.setText(n)))(name))
+            self.params_box.layout().addWidget(button, row, column)
+        self.layout().addWidget(self.params_box)
         self.rank = leaf.rank
 
     def add_attribute(self):
