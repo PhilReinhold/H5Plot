@@ -275,18 +275,23 @@ class PlotWindow(SlabWindow):
 
     def remove_item(self, path):
         item = self.tree_widgets[path]
+
         if item.is_leaf():
             print 'window.remove_item', path
             widget = self.plot_widgets.pop(item.path)
-            #widget = self.plot_widgets[item.path]
-            #if widget.visible:
-            #    widget.toggle_hide()
             widget.visible = False
             widget.close()
-            widget.destroy()
+            widget.destroy() # This might be voodoo
+
+        if item.parent() and item.parent().childCount == 1:
+            self.remove_item(path[:-1])
 
         root = self.structure_tree.invisibleRootItem()
         (item.parent() or root).removeChild(item)
+
+        attr_widget = self.attrs_widgets.pop(path)
+        attr_widget.close()
+        attr_widget.destroy()
 
     def load(self, readonly=False):
         filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
@@ -296,17 +301,22 @@ class PlotWindow(SlabWindow):
         self.background_client.load_h5file(filename, readonly=readonly)
 
     def add_tree_widget(self, path, data=False, shape=(), save=True, plot=True):
+        if path in self.tree_widgets:
+            if data: # Update the description
+                self.tree_widgets[path].update_fields(shape, save, plot)
+            return
+
+        if path[:-1] not in self.tree_widgets: # Make parent if it doesn't exist
+            self.add_tree_widget(path[:-1])
+
         if data:
             item = DataTreeLeafItem([path[-1], str(shape), str(save), str(plot)])
         else:
             item = DataTreeLeafItem([path[-1]])
 
-        if len(path[:-1]) > 0:
-            parent = self.tree_widgets[path[:-1]]
-            parent.addChild(item)
-            parent.setExpanded(True)
-        else:
-            self.structure_tree.addTopLevelItem(item)
+        parent = item.parent() or self.structure_tree.invisibleRootItem()
+        parent.addChild(item)
+        parent.setExpanded(True)
 
         if not data:
             item.setFirstColumnSpanned(True)
@@ -327,16 +337,22 @@ class PlotWindow(SlabWindow):
                 self.toggle_item(child, col)
 
     def change_edit_widget(self, item, col):
+        path = item.path
         if self.current_edit_widget is not None:
-            self.sidebar.layout().removeWidget(self.current_edit_widget)
-            self.current_edit_widget.setParent(None)
-        if item.is_leaf():
-            leaf = self.background_client.get_or_make_leaf(item.path, reduced=True)
-            self.current_edit_widget = LeafEditWidget(leaf)
+            self.current_edit_widget.hide()
+
+        if path not in self.attrs_widgets:
+            if item.is_leaf:
+                widget = LeafEditWidget(path, {})
+            else:
+                widget = NodeEditWidget(path, {})
+            self.sidebar.layout().addWidget(widget)
+            self.attrs_widgets[path] = widget
         else:
-            attrs = self.background_client.get_all_attrs(item.path)
-            self.current_edit_widget = NodeEditWidget(item.path, attrs)
-        self.sidebar.layout().addWidget(self.current_edit_widget)
+            widget = self.attrs_widgets[path]
+            widget.show()
+
+        self.current_edit_widget = widget
 
     def add_plot_widget(self, path, rank=1, **kwargs):
         if path in self.plot_widgets:

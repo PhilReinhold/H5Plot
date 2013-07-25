@@ -171,44 +171,29 @@ class DataManager(Qt.QObject):
                 self.gui.plot_widgets[path].update_plot(item, refresh_labels=refresh_labels, **curve_args)
         self.gui.update_multiplots(path, item)
 
-    def remove_item(self, name_or_path):
-        print 'background.remove_item', name_or_path
-        path = helpers.canonicalize_path(name_or_path)
-        item = self.data.resolve_path(path)
-        if isinstance(item, DataTreeLeaf):
-            name = path[-1]
-            group_path = path[:-1]
-            group = self.data.resolve_path(group_path)
-            del group[name]
-            self.gui.remove_item(path)
-            # If removing this item leaves parent groups childless, remove them too-
-            while group_path and len(group.keys()) == 0:
-                name = group_path[-1]
-                group_path = group_path[:-1]
-                group = self.data.resolve_path(group_path)
-                group[name].close()
-                del group[name]
-                self.gui.remove_item(group_path + (name,))
-        else:
-            for name in item.keys():
-                self.remove_item(path + (name,))
+    # Not needed
+    #def remove_item(self, path):
+    #    del self.data[path]
+    #    del self.attrs[path]
+    #    self.gui.remove_item(path)
 
-    def clear_data(self, path=None, leaf=None):
-        assert path is not None or leaf is not None
-        if leaf is None:
-            leaf = self.get_or_make_leaf(path)
-        else:
-            path = leaf.path
-        if leaf.rank == 1:
-            leaf.data = None
-        elif leaf.rank == 2:
-            leaf.data = None
-        if leaf.plot:
-            self.update_plot(path)
+    # Why do we need clear again?
+    #def clear_data(self, path=None, leaf=None):
+    #    assert path is not None or leaf is not None
+    #    if leaf is None:
+    #        leaf = self.get_or_make_leaf(path)
+    #    else:
+    #        path = leaf.path
+    #    if leaf.rank == 1:
+    #        leaf.data = None
+    #    elif leaf.rank == 2:
+    #        leaf.data = None
+    #    if leaf.plot:
+    #        self.update_plot(path)
 
-    def clear_all_data(self):
-        for path, leaf in self.data.leaves():
-            self.clear_data(leaf=leaf)
+    #def clear_all_data(self):
+    #    for path, leaf in self.data.leaves():
+    #        self.clear_data(leaf=leaf)
 
     def serve(self):
         print 'serving'
@@ -220,35 +205,64 @@ class DataManager(Qt.QObject):
         listen_socket = self.zmq_ctx.socket(zmq.SUB)
         listen_socket.setsockopt(zmq.SUBSCRIBE, '')
         listen_socket.connect('tcp://127.0.0.1:7677')
+        last_winupdate_time = 0
+        self.dirty_data = set([])
+        self.dirty_attrs = set([])
         global RUNNING
         while RUNNING:
             data_patch = {}
             attrs_patch = {}
             while listen_socket.poll():
                 json = listen_socket.recv_json()
+                path = json['path']
                 if 'attrs' in json:
-                    attrs_patch[json['path']] = json['attrs']
+                    attrs_patch[path] = json['attrs']
                 else:
                     data = recv_array(listen_socket)
-                    data_patch[json['path']] = data
+                    data_patch[path] = data
             self.data.update(data_patch)
+            self.dirty_data.update(data_patch.keys())
             self.attrs.update(attrs_patch)
+            self.dirty_attrs.update(attrs_patch.keys())
+            if time.time() - last_winupdate_time > self.inter_winupdate_time:
+                self.winupdate_tree()
+                self.winupdate_data()
+                self.winupdate_attrs()
+                last_winupdate_time = time.time()
 
-
-
-        #with Pyro4.Daemon(host=config.manager_host, port=config.manager_port) as d:
-        #    global RUNNING
-        #    self.running = True
-        #    d.register(self, config.manager_id)
-        #    d.requestLoop(lambda: RUNNING)
-        print 'done serving'
-        self.data.close()
-        print "data closed"
         if self.coverage:
             cov.stop()
             cov.save()
-        #self.emit(Qt.SIGNAL('server done'))
-        print "sig emitted"
+
+    def winupdate_tree(self):
+        for key in self.dirty_data.union(self.dirty_attrs):
+            if key in self.data:
+                shape = self.data[key].shape
+                save = self.attrs[key].get('save', True)
+                plot = self.attrs[key].get('plot', True)
+                self.gui.add_tree_widget(key, shape, save=save, plot=plot)
+
+    def winupdate_data(self):
+        for key in self.dirty_data:
+            plot_attrs = self.get_plot_attrs(key)
+            self.gui.plot_widgets[key].update(self.data[key], plot_attrs)
+
+    def winupdate_attrs(self):
+        for key in self.dirty_attrs:
+            self.gui.attrs_widgets[key].update(self.attrs[key])
+
+    def get_plot_attrs(self, path):
+        attrs = self.attrs[path]
+        x0 = attrs.get('x0', 0)
+        xscale = attrs.get('xscale', 1)
+        y0 = attrs.get('y0', 0)
+        yscale = attrs.get('yscale', 1)
+        xlabel = attrs.get('xlabel', 'X')
+        ylabel = attrs.get('ylabel', 'Y')
+        zlabel = attrs.get('zlabel', 'Z')
+        parametric = attrs.get('parametric', False)
+        plot_args = {} # TODO: Extract Plot Arguments
+        return (x0, xscale, y0, yscale, xlabel, ylabel, zlabel, parametric, plot_args)
 
     def abort_daemon(self):
         global RUNNING

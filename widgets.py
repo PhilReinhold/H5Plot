@@ -12,6 +12,11 @@ import helpers
 from model import DataTreeLeaf
 
 class DataTreeLeafItem(Qt.QTreeWidgetItem):
+    def update_fields(self, shape, save, plot):
+        self.setText(1, str(shape))
+        self.setText(2, str(save))
+        self.setText(3, str(plot))
+
     @property
     def path(self):
         if self.parent() is None:
@@ -22,7 +27,6 @@ class DataTreeLeafItem(Qt.QTreeWidgetItem):
     @property
     def strpath(self):
         return '/'.join(map(str, self.path))
-
 
 Qt.QTreeWidgetItem.is_leaf = lambda item: str(item.text(1)) != ""
 Qt.QTreeWidgetItem.getChildren = lambda item: [item.child(i) for i in range(item.childCount())]
@@ -82,6 +86,16 @@ class NodeEditWidget(Qt.QFrame):
         self.layout().addWidget(self.attr_list)
         self.layout().addWidget(add_attr_box)
 
+    def update(self, attrs):
+        for k, v in attrs.items():
+            if k not in self.attr_list_items:
+                item = Qt.QTreeWidgetItem([k, str(v), str(type(v))])
+                self.attr_list_items[k] = item
+                self.attr_list.addTopLevelItem(item)
+            else:
+                self.attr_list_items[k].setText(1, str(v))
+                self.attr_list_items[k].setText(2, str(type(v)))
+
     def check_attr_name(self, name):
         print self.attr_list.findItems("", Qt.Qt.MatchContains)
         if any(i.text(0) == name for i in self.attr_list.findItems("", Qt.Qt.MatchContains)):
@@ -127,8 +141,8 @@ class NodeEditWidget(Qt.QFrame):
 
 class LeafEditWidget(NodeEditWidget):
     param_attrs = ['x0', 'y0', 'xscale', 'yscale', 'xlabel', 'ylabel', 'zlabel', 'parametric']
-    def __init__(self, leaf):
-        NodeEditWidget.__init__(self, leaf.path, leaf.attrs)
+    def __init__(self, path, attrs):
+        NodeEditWidget.__init__(self, path, attrs)
         self.params_box = Qt.QWidget()
         self.params_box.setLayout(Qt.QGridLayout())
         for i, name in enumerate(self.param_attrs):
@@ -138,7 +152,7 @@ class LeafEditWidget(NodeEditWidget):
             button.clicked.connect((lambda n: (lambda: self.attr_name_edit.setText(n)))(name))
             self.params_box.layout().addWidget(button, row, column)
         self.layout().addWidget(self.params_box)
-        self.rank = leaf.rank
+        #self.rank = leaf.rank
 
     def add_attribute(self):
         name, value = NodeEditWidget.add_attribute(self)
@@ -249,35 +263,31 @@ class Rank1ItemWidget(ItemWidget):
         self.addWidget(self.line_plt)
         self.curve = None
 
-    def update_plot(self, leaf, refresh_labels=False, **kwargs):
-        if leaf is None or leaf.data is None or leaf.data.shape[0] is 0:
+    def update(self, data, attrs):
+        x0, xscale, y0, yscale, xlabel, ylabel, zlabel, parametric, plot_args= attrs
+
+        if data is None or data.shape[0] is 0:
             self.clear_plot()
             return
 
         if self.update_toggle.isChecked():
-            if leaf.parametric:
-                if leaf.data.shape[0] == 2:
-                    xdata, ydata = leaf.data
-                elif leaf.data.shape[1] == 2:
-                    xdata, ydata = leaf.data.T
+            if parametric:
+                if data.shape[0] == 2:
+                    xdata, ydata = data
+                elif data.shape[1] == 2:
+                    xdata, ydata = data.T
                 else:
                     raise ValueError('Leaf claims to be parametric, but shape is ' + str(leaf.data.shape))
             else:
-                ydata = leaf.data
-                xdata = np.arange(leaf.x0, leaf.x0+(leaf.xscale*len(ydata)), leaf.xscale)
+                ydata = data
+                xdata = np.arange(x0, x0+(xscale*len(ydata)), xscale)
 
-        if refresh_labels:
-            self.line_plt.plotItem.setLabels(bottom=(leaf.xlabel,), left=(leaf.ylabel,))
+        self.line_plt.plotItem.setLabels(bottom=(xlabel,), left=(ylabel,))
 
         if self.curve is None:
-            self.curve = self.line_plt.plot(xdata, ydata, **kwargs)
+            self.curve = self.line_plt.plot(xdata, ydata, **plot_args)
         else:
-            self.curve.setData(x=xdata, y=ydata, **kwargs)
-
-    def clear_plot(self):
-        if self.curve is not None:
-            self.line_plt.removeItem(self.curve)
-            self.curve = None
+            self.curve.setData(x=xdata, y=ydata, **plot_args)
 
 
 class MultiplotItemWidget(Rank1ItemWidget):
