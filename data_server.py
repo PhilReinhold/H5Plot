@@ -126,6 +126,7 @@ class DataServerClient:
         else:
             self.pub_socket = socket
         self.path = ()
+        self.attrs = None
 
     def _clone(self):
         c = DataServerClient(self.pub_socket)
@@ -136,6 +137,8 @@ class DataServerClient:
         assert isinstance(item, str), "Item must be name of data group, not " + str(item)
         c = self._clone()
         c.path += (item,)
+        c.attrs = AttrsClient(c.path)
+
         return c
 
     def __setitem__(self, key, data):

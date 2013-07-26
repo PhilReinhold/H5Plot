@@ -152,24 +152,24 @@ class DataManager(Qt.QObject):
         node = self.data.resolve_path(path)
         return node.attrs
 
-    def update_plot(self, name_or_path, refresh_labels=False, show_most_recent=None, **curve_args):
-        path = helpers.canonicalize_path(name_or_path)
-        item = self.data.resolve_path(path)
-        tree_widget = self.gui.tree_widgets[path]
-        try:
-            tree_widget.setText(1, str(item.data.shape))
-        except AttributeError:
-            tree_widget.setText(1, 'No Data')
-        tree_widget.setText(2, str(item.save))
-        tree_widget.setText(3, str(item.plot))
-        if item.plot:
-            self.gui.plot_widgets_update_log[path] = time.time()
-            if item.rank == 2:
-                self.gui.plot_widgets[path].update_plot(item,
-                        refresh_labels=refresh_labels, show_most_recent=show_most_recent, **curve_args)
-            else:
-                self.gui.plot_widgets[path].update_plot(item, refresh_labels=refresh_labels, **curve_args)
-        self.gui.update_multiplots(path, item)
+    #def update_plot(self, name_or_path, refresh_labels=False, show_most_recent=None, **curve_args):
+    #    path = helpers.canonicalize_path(name_or_path)
+    #    item = self.data.resolve_path(path)
+    #    tree_widget = self.gui.tree_widgets[path]
+    #    try:
+    #        tree_widget.setText(1, str(item.data.shape))
+    #    except AttributeError:
+    #        tree_widget.setText(1, 'No Data')
+    #    tree_widget.setText(2, str(item.save))
+    #    tree_widget.setText(3, str(item.plot))
+    #    if item.plot:
+    #        self.gui.plot_widgets_update_log[path] = time.time()
+    #        if item.rank == 2:
+    #            self.gui.plot_widgets[path].update_plot(item,
+    #                    refresh_labels=refresh_labels, show_most_recent=show_most_recent, **curve_args)
+    #        else:
+    #            self.gui.plot_widgets[path].update_plot(item, refresh_labels=refresh_labels, **curve_args)
+    #    self.gui.update_multiplots(path, item)
 
     # Not needed
     #def remove_item(self, path):
@@ -279,24 +279,24 @@ class DataManager(Qt.QObject):
     #    dialog.exec_()
     #    print 'here3'
 
-    def save_as_file(self, path):
-        data = self.data.resolve_path(path)
-        assert isinstance(data, DataTree)
-        assert helpers.valid_h5file(path[-1])
-        with h5py.File(path[-1], 'a') as f:
-            for item in data.values():
-                item.save_in_file(f)
+    #def save_as_file(self, path):
+    #    data = self.data.resolve_path(path)
+    #    assert isinstance(data, DataTree)
+    #    assert helpers.valid_h5file(path[-1])
+    #    with h5py.File(path[-1], 'a') as f:
+    #        for item in data.values():
+    #            item.save_in_file(f)
 
-    def save_with_file(self, path, filename):
-        with h5py.File(filename, 'a') as h5file:
-            data = self.data.resolve_path(path)
-            f = h5file
-            for p in path[:-1]:
-                if p not in f:
-                    f = f.create_group(p)
-                else:
-                    f = f[p]
-            data.save_in_file(f)
+    #def save_with_file(self, path, filename):
+    #    with h5py.File(filename, 'a') as h5file:
+    #        data = self.data.resolve_path(path)
+    #        f = h5file
+    #        for p in path[:-1]:
+    #            if p not in f:
+    #                f = f.create_group(p)
+    #            else:
+    #                f = f[p]
+    #        data.save_in_file(f)
 
     def msg(self, *args):
         self.gui.msg(*args)
