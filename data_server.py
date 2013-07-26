@@ -19,6 +19,7 @@ def recv_array(socket, flags=0, copy=True, track=False):
     A = np.frombuffer(buf, dtype=md['dtype'])
     return A.reshape(md['shape'])
 
+
 class DataCommands:
     set = 0
     setslice = 1
@@ -26,15 +27,17 @@ class DataCommands:
     attr = 3
     load = 4
 
+server_in_addr = 'tcp://127.0.0.1:7676'
+server_out_addr = 'tcp://127.0.0.1:7677'
 
 class DataServer:
     def __init__(self):
         ctx = zmq.Context()
         self.sub_socket = ctx.socket(zmq.SUB)
+        self.sub_socket.bind(server_in_addr)
         self.sub_socket.setsockopt(zmq.SUBSCRIBE, '')
-        self.sub_socket.bind('tcp://127.0.0.1:7676')
         self.pub_socket = ctx.socket(zmq.PUB)
-        self.sub_socket.bind('tcp://127.0.0.1:7677')
+        self.pub_socket.bind(server_out_addr)
         #self.rep_socket = ctx.socket(zmq.REP)
         #self.rep_socket.bind('tcp://127.0.0.1:7678')
 
@@ -43,37 +46,40 @@ class DataServer:
 
     def main_loop(self):
         while self.running:
-            if self.sub_socket.poll():
-                json = self.sub_socket.recv_json()
-                command, path = json['command'], json['path']
+            print 'Polling'
+            self.sub_socket.poll()
+            print 'Got'
+            json = self.sub_socket.recv_json()
+            command, path = json['command'], json['path']
+            print 'Received', command, path
 
-                if self.sub_socket.getsockopt(zmq.RCVMORE):
-                    data = recv_array(self.sub_socket)
-                else:
-                    data = json['data']
+            if self.sub_socket.getsockopt(zmq.RCVMORE):
+                data = recv_array(self.sub_socket)
+            else:
+                data = json['data']
 
-                if command == DataCommands.load:
-                    file = self.get_or_make_path(path)
-                    self.publish_file(path, file)
+            if command == DataCommands.load:
+                file = self.get_or_make_path(path)
+                self.publish_file(path, file)
 
-                group = self.get_or_make_path(path[:-1])
-                dsetname = path[-1]
+            group = self.get_or_make_path(path[:-1])
+            dsetname = path[-1]
 
-                if command == DataCommands.set:
-                    print 'set', group, path, data
-                    group[dsetname] = data
-                elif command == DataCommands.setslice:
-                    slice = json['extra']
-                    group[dsetname][slice] = data
-                elif command == DataCommands.append:
-                    #dataset.append_data(data)
-                    raise NotImplementedError
-                elif command == DataCommands.attr:
-                    name, value = data
-                    group[dsetname].attrs[name] = value
+            if command == DataCommands.set:
+                print 'set', group, path, data
+                group[dsetname] = data
+            elif command == DataCommands.setslice:
+                slice = json['extra']
+                group[dsetname][slice] = data
+            elif command == DataCommands.append:
+                #dataset.append_data(data)
+                raise NotImplementedError
+            elif command == DataCommands.attr:
+                name, value = data
+                group[dsetname].attrs[name] = value
 
-                group[dsetname].file.flush()
-                self.publish_array(path, np.array(group[dsetname]))
+            group[dsetname].file.flush()
+            self.publish_array(path, np.array(group[dsetname]))
 
     def publish_array(self, path, array):
         self.pub_socket.send_json({'path': path}, flags=zmq.SNDMORE)
@@ -122,7 +128,7 @@ class DataServerClient:
         if socket is None:
             ctx = zmq.Context()
             self.pub_socket = ctx.socket(zmq.PUB)
-            self.pub_socket.connect('tcp://127.0.0.1:7676')
+            self.pub_socket.connect(server_in_addr)
         else:
             self.pub_socket = socket
         self.path = ()
@@ -137,7 +143,7 @@ class DataServerClient:
         assert isinstance(item, str), "Item must be name of data group, not " + str(item)
         c = self._clone()
         c.path += (item,)
-        c.attrs = AttrsClient(c.path)
+        c.attrs = AttrsClient(c)
 
         return c
 
@@ -158,11 +164,23 @@ class DataServerClient:
         if isinstance(data, np.ndarray):
             self.pub_socket.send_json(json, flags=zmq.SNDMORE)
             send_array(self.pub_socket, data)
+            print 'Sent Array'
         else:
             json['data'] = data
             self.pub_socket.send_json(json)
+            print 'Sent Other'
 
     def append_data(self, data):
         self._send(DataCommands.append, self.path, data)
 
 
+class AttrsClient:
+    def __init__(self, node):
+        self.node = node
+
+    def __setitem__(self, key, value):
+        self.node._send(DataCommands.attr, self.node.path, {key: value})
+
+if __name__ == "__main__":
+    s = DataServer()
+    s.main_loop()

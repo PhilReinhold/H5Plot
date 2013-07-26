@@ -105,11 +105,15 @@ class SlabWindow(Qt.QMainWindow):
 
 class PlotWindow(SlabWindow):
     def __init__(self, coverage=False):
+        print 'A'
         manager = DataManager()
+        print 'B'
         manager.coverage = coverage
+        print 'C'
         SlabWindow.__init__(self, manager)
-        manager._connect_data()
-        self.background_client = TempDataClient() # Don't actually call this until __init__ has returned!
+        print 'D'
+        #self.background_client = TempDataClient() # Don't actually call this until __init__ has returned!
+        print 'F'
 
         self.structure_tree = Qt.QTreeWidget()
         self.structure_tree.setColumnCount(4)
@@ -129,10 +133,12 @@ class PlotWindow(SlabWindow):
         #change_scale_action.triggered().connect(self.)
         #structure_tree_menu.addAction(change_scale_action)
 
+        print 'G'
 
         #self.dock_area = pyqtgraph.dockarea.DockArea()
         self.dock_area = MyDockArea()
         #self.dock_insert_location = 'bottom'
+        print 'H'
 
         self.max_plots_spinner = Qt.QSpinBox()
         self.max_plots_spinner.setValue(6)
@@ -140,38 +146,40 @@ class PlotWindow(SlabWindow):
         max_plots_widget.setLayout(Qt.QHBoxLayout())
         max_plots_widget.layout().addWidget(Qt.QLabel('Maximum Plot Count'))
         max_plots_widget.layout().addWidget(self.max_plots_spinner)
-        self.save_button = Qt.QPushButton('Save Selection')
-        self.save_button.clicked.connect(self.save_selection)
-        self.save_button.setEnabled(False)
+        #self.save_button = Qt.QPushButton('Save Selection')
+        #self.save_button.clicked.connect(self.save_selection)
+        #self.save_button.setEnabled(False)
         self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
         self.multiplot_button.clicked.connect(self.add_multiplot)
         self.multiplot_button.setEnabled(False)
-        self.remove_button = Qt.QPushButton('Remove Selection')
-        self.remove_button.clicked.connect(self.remove_selection)
-        self.remove_button.setEnabled(False)
+        #self.remove_button = Qt.QPushButton('Remove Selection')
+        #self.remove_button.clicked.connect(self.remove_selection)
+        #self.remove_button.setEnabled(False)
         self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
         self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
         self.parametric_button.setEnabled(False)
+        print 'H'
 
         self.setCentralWidget(Qt.QSplitter())
         self.sidebar = sidebar = Qt.QWidget()
         sidebar.setLayout(Qt.QVBoxLayout())
         sidebar.layout().addWidget(max_plots_widget)
         sidebar.layout().addWidget(self.structure_tree)
-        sidebar.layout().addWidget(self.save_button)
+        #sidebar.layout().addWidget(self.save_button)
         sidebar.layout().addWidget(self.multiplot_button)
-        sidebar.layout().addWidget(self.remove_button)
+        #sidebar.layout().addWidget(self.remove_button)
         sidebar.layout().addWidget(self.parametric_button)
         self.centralWidget().addWidget(sidebar)
         self.centralWidget().addWidget(self.dock_area)
         self.centralWidget().setSizes([300, 1000])
         self.current_edit_widget = None
+        print 'I'
 
         file_menu = self.menuBar().addMenu('File')
-        file_menu.addAction('Save').triggered.connect(lambda checked: self.background_client.save_all())
+        #Ifile_menu.addAction('Save').triggered.connect(lambda checked: self.background_client.save_all())
         file_menu.addAction('Load').triggered.connect(lambda checked: self.load())
         file_menu.addAction('Load (readonly)').triggered.connect(lambda checked: self.load(readonly=True))
-        file_menu.addAction('Clear').triggered.connect(lambda checked: self.background_client.clear_all_data())
+        #file_menu.addAction('Clear').triggered.connect(lambda checked: self.background_client.clear_all_data())
 
         self.message_box = Qt.QTextEdit()
         self.message_box.setReadOnly(True)
@@ -182,6 +190,7 @@ class PlotWindow(SlabWindow):
         action.setCheckable(True)
         action.setChecked(False)
         action.triggered.connect(self.message_box.setVisible)
+        print 'J'
 
         self.plot_widgets = {}
         self.plot_widgets_update_log = {}
@@ -189,36 +198,38 @@ class PlotWindow(SlabWindow):
         self.multiplot_widgets = {}
         self.parametric_widgets = {}
         self.multiplots = defaultdict(list)
+        print 'K'
 
-        def clean_up(close_event):
-            self.background_client.abort_daemon()
-            #self.wait_for_cleanup_dialog()
-            print 'start wait'
-            time.sleep(1)
-            self.background_thread.quit()
-            #self.background_thread.wait()
-            print 'end wait'
+        #def clean_up(close_event):
+        #    self.background_client.abort_daemon()
+        #    #self.wait_for_cleanup_dialog()
+        #    print 'start wait'
+        #    time.sleep(1)
+        #    self.background_thread.quit()
+        #    #self.background_thread.wait()
+        #    print 'end wait'
 
-        self.closeEvent = clean_up
+        #self.closeEvent = clean_up
 
         #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), self.wait_for_cleanup_dialog)
         #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), lambda: self.background_client.abort_daemon())
         #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), self.background_thread.wait)
 
+        print 'starting'
         self.start_thread()
         self.background.serve()
 
-    def save_selection(self):
-        selection = self.structure_tree.selectedItems()
-        if len(selection) == 1 and helpers.valid_h5file(str(selection[0].text(0))):
-            self.background_client.save_as_file(selection[0].path)
-        else:
-            filename = str(Qt.QFileDialog.getSaveFileName(self, "Destination File",
-                                                          config.h5file_directory, config.h5file_filter))
-            if not filename:
-                return
-            for item in selection:
-                self.background_client.save_with_file(item.path, filename)
+    #def save_selection(self):
+    #    selection = self.structure_tree.selectedItems()
+    #    if len(selection) == 1 and helpers.valid_h5file(str(selection[0].text(0))):
+    #        self.background_client.save_as_file(selection[0].path)
+    #    else:
+    #        filename = str(Qt.QFileDialog.getSaveFileName(self, "Destination File",
+    #                                                      config.h5file_directory, config.h5file_filter))
+    #        if not filename:
+    #            return
+    #        for item in selection:
+    #            self.background_client.save_with_file(item.path, filename)
 
     def add_multiplot(self, parametric=False):
         selection = self.structure_tree.selectedItems()
@@ -232,7 +243,7 @@ class PlotWindow(SlabWindow):
         widget.remove_button.clicked.connect(lambda: self.remove_multiplot(paths, parametric=parametric))
         for item in selection:
             self.multiplots[item.strpath].append(widget)
-            self.background_client.update_plot(item.path)
+            #self.background_client.update_plot(item.path)
         self.regulate_plot_count()
 
     def remove_multiplot(self, paths, parametric=False):
@@ -263,15 +274,15 @@ class PlotWindow(SlabWindow):
         self.remove_button.setEnabled(remove)
         self.parametric_button.setEnabled(parametric)
 
-    def remove_selection(self):
-        for item in self.structure_tree.selectedItems():
-            # This is a little complicated. We need to remove the data from the background.
-            # Removing it from the background, however, can also be done through a client.
-            # Removing it from a client should trigger removal of the plots from the window.
-            # Therefore, the chain of control in this command is
-            # Window.remove_selection --> Background.remove_item --> Window.remove_item
-            # Sorry.
-            self.background_client.remove_item(item.path)
+    #def remove_selection(self):
+    #    for item in self.structure_tree.selectedItems():
+    #        # This is a little complicated. We need to remove the data from the background.
+    #        # Removing it from the background, however, can also be done through a client.
+    #        # Removing it from a client should trigger removal of the plots from the window.
+    #        # Therefore, the chain of control in this command is
+    #        # Window.remove_selection --> Background.remove_item --> Window.remove_item
+    #        # Sorry.
+    #        self.background_client.remove_item(item.path)
 
     def remove_item(self, path):
         item = self.tree_widgets[path]
@@ -293,12 +304,12 @@ class PlotWindow(SlabWindow):
         attr_widget.close()
         attr_widget.destroy()
 
-    def load(self, readonly=False):
-        filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
-                                                        config.h5file_directory, config.h5file_filter))
-        if not filename:
-            return
-        self.background_client.load_h5file(filename, readonly=readonly)
+    #def load(self, readonly=False):
+    #    filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
+    #                                                    config.h5file_directory, config.h5file_filter))
+    #    if not filename:
+    #        return
+    #    self.background_client.load_h5file(filename, readonly=readonly)
 
     def add_tree_widget(self, path, data=False, shape=(), save=True, plot=True):
         if path in self.tree_widgets:
@@ -330,7 +341,7 @@ class PlotWindow(SlabWindow):
         if item.is_leaf():# and item.plot:
             widget = self.plot_widgets[item.path]
             widget.toggle_hide()
-            self.background_client.set_params(item.path, widget.rank, plot=widget.visible)
+            #self.background_client.set_params(item.path, widget.rank, plot=widget.visible)
             print 'toggled', item.path
         else:
             for child in item.getChildren():
@@ -365,8 +376,8 @@ class PlotWindow(SlabWindow):
         else:
             raise ValueError('Rank must be either 1 or 2, not ' + str(rank))
 
-        item.clear_button.clicked.connect(lambda: self.background_client.clear_data(path))
-        item.remove_button.clicked.connect(lambda: self.background_client.set_params(path, rank, plot=False))
+        #item.clear_button.clicked.connect(lambda: self.background_client.clear_data(path))
+        #item.remove_button.clicked.connect(lambda: self.background_client.set_params(path, rank, plot=False))
         self.register_param('update'+strpath, item.update_toggle)
         self.plot_widgets[path] = item
         self.plot_widgets_update_log[path] = time.time()

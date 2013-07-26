@@ -202,7 +202,8 @@ class DataManager(Qt.QObject):
             cov = coverage(data_suffix='manager')
             cov.start()
 
-        listen_socket = self.zmq_ctx.socket(zmq.SUB)
+        ctx = zmq.Context()
+        listen_socket = ctx.socket(zmq.SUB)
         listen_socket.setsockopt(zmq.SUBSCRIBE, '')
         listen_socket.connect('tcp://127.0.0.1:7677')
         last_winupdate_time = 0
@@ -213,6 +214,8 @@ class DataManager(Qt.QObject):
             data_patch = {}
             attrs_patch = {}
             while listen_socket.poll():
+                msg = listen_socket.recv()
+                print 'Message', msg
                 json = listen_socket.recv_json()
                 path = json['path']
                 if 'attrs' in json:
