@@ -1,120 +1,82 @@
-import types
 import time
-from collections import defaultdict
-
 from PyQt4 import Qt
-#from PyQt4.QtTest import QTest
-#import pyqtgraph
-
-from controller import DataManager
-from interface import DataClient
 from widgets import *
-import helpers
-import config
-
-class GenericProxy(object):
-    """
-    Turns proxy.a['b'].c[1](d, e='f') into
-    emitter.emit(sig_name, [('prop','a'),'b','c',1], d, {'e':'f'})
-
-    Warning, not capable of returning values!
-    """
-    def __init__(self, sig_name,  emitter, context=[]):
-        self._emitter = emitter
-        self._sig_name = sig_name
-        self._context = context
-
-    def __getattr__(self, attr):
-        return GenericProxy(self._sig_name, self._emitter, self._context + [('attr', attr)])
-
-    def __getitem__(self, item):
-        return GenericProxy(self._sig_name, self._emitter, self._context + [('item', item)])
-
-    def __setitem__(self, item, value):
-        return GenericProxy(self._sig_name, self._emitter, self._context + [('setitem', (item, value))])
-
-    def __call__(self, *args, **kwargs):
-        self._emitter.emit(Qt.SIGNAL(self._sig_name), self._context, args, kwargs)
+import objectsharer as objsh
 
 
-def proxify(obj, connector, sig_name):
-    emitter_obj = Qt.QObject()
-    proxy = GenericProxy(sig_name, emitter_obj)
-    def run_from_proxy_fn(self, context, args, kwargs):
-        current = self
-        for operation, arg in context:
-            if operation == 'attr':
-                current = getattr(current, arg)
-            elif operation == 'item':
-                try:
-                    current = current[arg]
-                except:
-                    print context, current
-                    raise
-            elif operation == 'setitem':
-                item, value = arg
-                current[item] = value
-            else:
-                raise ValueError('Unidentified operation ' + str(operation))
-        current(*args, **kwargs)
-    obj._run_from_proxy = types.MethodType(run_from_proxy_fn, obj, type(obj))
-    def conn_fn():
-        connector.connect(proxy._emitter, Qt.SIGNAL(sig_name),
-                          obj._run_from_proxy)
+class WindowDataGroup:
+    def __init__(self, name, parent, proxy=None, attrs=None):
+        self.name = name
+        self.parent = parent
+        self.proxy = proxy if proxy is not None else parent.proxy
+        self.children = []
+        self.is_dataset = False
 
-    return proxy, conn_fn
+        if parent is None:
+            self.path = (name,)
+        else:
+            self.path = parent.path + (name,)
 
-class TempDataClient(object):
-    def __getattr__(self, item):
-        def call_on_data_client(*args, **kwargs):
-            with DataClient() as c:
-                return getattr(c, item)(*args, **kwargs)
-        return call_on_data_client
+        if self.attrs is not None:
+            self.attrs = attrs
+        else:
+            self.attrs = {}
 
-class SlabWindow(Qt.QMainWindow):
-    def __init__(self, background_obj):
+
+class WindowDataSet(WindowDataGroup):
+    def __init__(self, name, parent, proxy=None, attrs=None):
+        WindowDataGroup.__init__(self, name, parent, proxy, attrs=attrs)
+        self.is_dataset = True
+        del self.children # DataSets have no children
+
+        self.data = self.proxy[:]
+        self.plot = RankNItemWidget(self.get_rank(), self.path)
+
+        self.multiplots = []
+        self.parametric_plots = []
+
+    def update_data(self):
+        self.data = self.proxy[:]
+        self.plot.update_plot(self.data)
+
+    def get_rank(self):
+        if self.data is None or len(self.data) == 0:
+            return None
+
+        if self.is_parametric():
+            return len(self.data[0]) - 1
+        else:
+            return len(self.data.shape)
+
+    def is_parametric(self):
+        return self.attrs.get('parametric', False)
+
+class WindowInterface:
+    def __init__(self, window):
+        self.win = window
+
+# Removed from widgets, move to window
+        #self.dock_area = dock_area
+        #self.dock_area.add_dock_auto_location(self)
+
+    #def toggle_hide(self):
+    #    #self.setVisible(not(self.isVisible()))
+    #    if self.visible:
+    #        self.setParent(None)
+    #        self.label.setParent(None)
+    #        self.visible = False
+    #    else:
+    #        self.dock_area.add_dock_auto_location(self)
+    #        self.visible = True
+
+
+class PlotWindow(Qt.QMainWindow):
+    def __init__(self):
         Qt.QMainWindow.__init__(self)
-        self.background_obj = background_obj
-        self.background_obj.gui, connect_gui = proxify(self, self, 'gui')
-        connect_gui()
+        self.setup_ui()
+        self.data_groups = {}
 
-        if hasattr(self, 'setupUi'):
-            self.setupUi(self)
-
-        self.background_thread = Qt.QThread()
-        self.background, connect_background = proxify(self.background_obj, self, 'background')
-        self.background_obj.moveToThread(self.background_thread)
-        connect_background()
-        self.connect(self, Qt.SIGNAL('lastWindowClosed()'), self.background_thread.exit)
-
-    def register_param(self, name, widget):
-        for klass, actions in widget_tools.items():
-            if isinstance(widget, klass):
-                if isinstance(actions["read"], str):
-                    read_action = actions["read"]
-                    read_fn = lambda: \
-                        self.background_obj.set_param(name, getattr(widget, read_action)())
-                else:
-                    read_fn = actions["read"]
-                getattr(widget, actions["change_signal"]).connect(read_fn)
-                read_fn() # Call it to initialize
-
-    def start_thread(self):
-        self.background_thread.start()
-
-
-class PlotWindow(SlabWindow):
-    def __init__(self, coverage=False):
-        print 'A'
-        manager = DataManager()
-        print 'B'
-        manager.coverage = coverage
-        print 'C'
-        SlabWindow.__init__(self, manager)
-        print 'D'
-        #self.background_client = TempDataClient() # Don't actually call this until __init__ has returned!
-        print 'F'
-
+    def setup_ui(self):
         self.structure_tree = Qt.QTreeWidget()
         self.structure_tree.setColumnCount(4)
         self.structure_tree.setHeaderLabels(['Name', 'Shape', 'Save?', 'Plot?'])
@@ -127,19 +89,7 @@ class PlotWindow(SlabWindow):
         self.structure_tree.setColumnWidth(2, 50)
         self.structure_tree.setColumnWidth(3, 50)
 
-        #structure_tree_menu = Qt.QMenu(self.structure_tree)
-        #self.structure_tree.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
-        #change_scale_action = Qt.QAction('Change Labels/Scale')
-        #change_scale_action.triggered().connect(self.)
-        #structure_tree_menu.addAction(change_scale_action)
-
-        print 'G'
-
-        #self.dock_area = pyqtgraph.dockarea.DockArea()
         self.dock_area = MyDockArea()
-        #self.dock_insert_location = 'bottom'
-        print 'H'
-
         self.max_plots_spinner = Qt.QSpinBox()
         self.max_plots_spinner.setValue(6)
         max_plots_widget = Qt.QWidget()
@@ -158,7 +108,6 @@ class PlotWindow(SlabWindow):
         self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
         self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
         self.parametric_button.setEnabled(False)
-        print 'H'
 
         self.setCentralWidget(Qt.QSplitter())
         self.sidebar = sidebar = Qt.QWidget()
@@ -173,7 +122,6 @@ class PlotWindow(SlabWindow):
         self.centralWidget().addWidget(self.dock_area)
         self.centralWidget().setSizes([300, 1000])
         self.current_edit_widget = None
-        print 'I'
 
         file_menu = self.menuBar().addMenu('File')
         #Ifile_menu.addAction('Save').triggered.connect(lambda checked: self.background_client.save_all())
@@ -190,46 +138,46 @@ class PlotWindow(SlabWindow):
         action.setCheckable(True)
         action.setChecked(False)
         action.triggered.connect(self.message_box.setVisible)
-        print 'J'
 
-        self.plot_widgets = {}
-        self.plot_widgets_update_log = {}
-        self.tree_widgets = {}
-        self.multiplot_widgets = {}
-        self.parametric_widgets = {}
-        self.multiplots = defaultdict(list)
-        print 'K'
+    def setup_shared_objects(self):
+        zbe = objsh.ZMQBackend()
+        zbe.start_server('127.0.0.1', 7777)
+        zbe.connect_to('tcp://127.0.0.1:55556')
+        self.dataserver = objsh.helper.find_object('dataserver')
+        self.dataserver.connect('changed', self.get_data_changed)
+        public_interface = WindowInterface(self)
+        objsh.register(public_interface, 'plotwin')
+        zbe.add_qt_timer()
 
-        #def clean_up(close_event):
-        #    self.background_client.abort_daemon()
-        #    #self.wait_for_cleanup_dialog()
-        #    print 'start wait'
-        #    time.sleep(1)
-        #    self.background_thread.quit()
-        #    #self.background_thread.wait()
-        #    print 'end wait'
+    def get_data_changed(self, file, path):
+        if path not in self.data_groups: # Then create it
+            if len(path) > 1 and path[:-1] not in self.data_groups:
+                self.create_group(path[:-1]) # Create parent
+            parent = self.data_groups[path[:-1]]
+            child = WindowDataSet(path[-1], parent)
+            self.data_groups[path] = child
+            parent.children.append(child)
 
-        #self.closeEvent = clean_up
+        else:
+            self.data_groups[path].update_data()
 
-        #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), self.wait_for_cleanup_dialog)
-        #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), lambda: self.background_client.abort_daemon())
-        #self.connect(self, Qt.SIGNAL('lastWindowClosed()'), self.background_thread.wait)
+    def create_group(self, path):
+        if len(path) == 1:
+            filename = path[0]
+            proxy = self.dataserver.get_file(filename)
+            self.data_groups[path] = WindowDataGroup(filename, None, proxy)
 
-        print 'starting'
-        self.start_thread()
-        self.background.serve()
+        if path[:-1] not in self.data_groups:
+            self.create_group(path[:-1])
 
-    #def save_selection(self):
-    #    selection = self.structure_tree.selectedItems()
-    #    if len(selection) == 1 and helpers.valid_h5file(str(selection[0].text(0))):
-    #        self.background_client.save_as_file(selection[0].path)
-    #    else:
-    #        filename = str(Qt.QFileDialog.getSaveFileName(self, "Destination File",
-    #                                                      config.h5file_directory, config.h5file_filter))
-    #        if not filename:
-    #            return
-    #        for item in selection:
-    #            self.background_client.save_with_file(item.path, filename)
+        parent = self.data_groups[path[:-1]]
+        child = WindowDataGroup(path[-1], parent)
+        self.data_groups[path] = child
+        parent.chidren.append(child)
+
+    ##############
+    # Multiplots #
+    ##############
 
     def add_multiplot(self, parametric=False):
         selection = self.structure_tree.selectedItems()

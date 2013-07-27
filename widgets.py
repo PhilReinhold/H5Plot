@@ -202,7 +202,7 @@ class LeafEditWidget(NodeEditWidget):
     #     return params
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
-    def __init__(self, ident, dock_area, **kwargs):
+    def __init__(self, ident, **kwargs):
         if len(ident) > 25:
             name = '... ' + ident.split('/')[-1]
         else:
@@ -225,22 +225,11 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
         self.buttons_widget.layout().addWidget(self.update_toggle)
         #self.buttons_widget.layout().addWidget(self.autoscale_toggle)
         self.addWidget(self.buttons_widget)
-        self.dock_area = dock_area
-        self.dock_area.add_dock_auto_location(self)
         self.visible = True
 
     def update_params(self, **kwargs):
         self.__dict__.update(kwargs)
 
-    def toggle_hide(self):
-        #self.setVisible(not(self.isVisible()))
-        if self.visible:
-            self.setParent(None)
-            self.label.setParent(None)
-            self.visible = False
-        else:
-            self.dock_area.add_dock_auto_location(self)
-            self.visible = True
 
     def add_plot_widget(self, **kwargs):
         raise NotImplementedError
@@ -253,8 +242,8 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
 
 
 class Rank1ItemWidget(ItemWidget):
-    def __init__(self, ident, dock_area, **kwargs):
-        ItemWidget.__init__(self, ident, dock_area, **kwargs)
+    def __init__(self, ident, **kwargs):
+        ItemWidget.__init__(self, ident, **kwargs)
         self.rank = 1
 
     def add_plot_widget(self, **kwargs):
@@ -301,8 +290,8 @@ class MultiplotItemWidget(Rank1ItemWidget):
 
 
 class ParametricItemWidget(Rank1ItemWidget):
-    def __init__(self, path1, path2, dock_area, **kwargs):
-        Rank1ItemWidget.__init__(self, path1[-1]+' vs '+path2[-1], dock_area, **kwargs)
+    def __init__(self, path1, path2, **kwargs):
+        Rank1ItemWidget.__init__(self, path1[-1]+' vs '+path2[-1], **kwargs)
         self.transpose_toggle = Qt.QCheckBox('Transpose')
         self.transpose_toggle.stateChanged.connect(lambda s: self.update_plot())
         self.buttons_widget.layout().addWidget(self.transpose_toggle)
@@ -332,8 +321,8 @@ class ParametricItemWidget(Rank1ItemWidget):
         Rank1ItemWidget.update_plot(self, leaf, refresh_labels=True)
 
 class Rank2ItemWidget(Rank1ItemWidget):
-    def __init__(self, ident, dock_area, **kwargs):
-        Rank1ItemWidget.__init__(self, ident, dock_area, **kwargs)
+    def __init__(self, ident, **kwargs):
+        Rank1ItemWidget.__init__(self, ident, **kwargs)
         self.rank = 2
 
         self.histogram_check = Qt.QCheckBox('Histogram')
@@ -403,6 +392,13 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.recent_button.show()
         self.accum_button.hide()
 
+def RankNItemWidget(rank, path, **kwargs):
+    if rank == 1:
+        return Rank1ItemWidget(path, **kwargs)
+    elif rank == 2:
+        return Rank2ItemWidget(path, **kwargs)
+    else:
+        raise Exception('No rank ' + str(rank) + ' item widget')
 
 class CrossSectionWidget(pg.ImageView):
     def __init__(self, trace_size=80, **kwargs):
