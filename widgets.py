@@ -202,7 +202,7 @@ class LeafEditWidget(NodeEditWidget):
     #     return params
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
-    def __init__(self, ident, **kwargs):
+    def __init__(self, ident, dock_area, **kwargs):
         if len(ident) > 25:
             name = '... ' + ident.split('/')[-1]
         else:
@@ -225,7 +225,20 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
         self.buttons_widget.layout().addWidget(self.update_toggle)
         #self.buttons_widget.layout().addWidget(self.autoscale_toggle)
         self.addWidget(self.buttons_widget)
-        self.visible = True
+        self.dock_area = dock_area
+        self.dock_area.add_dock_auto_location(self)
+
+    def is_visible(self):
+        return self.parent() is not None
+
+    def toggle_hide(self):
+        if self.is_visible():
+            self.setParent(None)
+            self.label.setParent(None)
+            self.visible = False
+        else:
+            self.dock_area.add_dock_auto_location(self)
+            self.visible = True
 
     def update_params(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -234,7 +247,7 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
     def add_plot_widget(self, **kwargs):
         raise NotImplementedError
 
-    def update_plot(self, leaf):
+    def update(self, data, attrs=None):
         raise NotImplementedError
 
     def clear_plot(self):
@@ -242,9 +255,9 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
 
 
 class Rank1ItemWidget(ItemWidget):
-    def __init__(self, ident, **kwargs):
-        ItemWidget.__init__(self, ident, **kwargs)
-        self.rank = 1
+    rank = 1
+    def __init__(self, ident, dock_area, **kwargs):
+        ItemWidget.__init__(self, ident, dock_area, **kwargs)
 
     def add_plot_widget(self, **kwargs):
         #self.line_plt = pyqtgraph.PlotWidget(title=self.ident, **kwargs)
@@ -252,8 +265,18 @@ class Rank1ItemWidget(ItemWidget):
         self.addWidget(self.line_plt)
         self.curve = None
 
-    def update(self, data, attrs):
-        x0, xscale, y0, yscale, xlabel, ylabel, zlabel, parametric, plot_args= attrs
+    def update(self, data, attrs=None):
+        print 'UPDATE', self.ident, data.shape
+        if attrs is None:
+            attrs = {}
+
+        x0 = attrs.get("x0", 0)
+        xscale = attrs.get("xscale", 1)
+        xlabel = attrs.get("xlabel", "X")
+        ylabel = attrs.get("ylabel", "Y")
+        parametric = attrs.get("parametric", False)
+        plot_args = attrs.get("plot_args", {})
+
 
         if data is None or data.shape[0] is 0:
             self.clear_plot()
@@ -266,7 +289,7 @@ class Rank1ItemWidget(ItemWidget):
                 elif data.shape[1] == 2:
                     xdata, ydata = data.T
                 else:
-                    raise ValueError('Leaf claims to be parametric, but shape is ' + str(leaf.data.shape))
+                    raise ValueError('data claims to be parametric, but shape is ' + str(data.shape))
             else:
                 ydata = data
                 xdata = np.arange(x0, x0+(xscale*len(ydata)), xscale)
@@ -284,9 +307,9 @@ class MultiplotItemWidget(Rank1ItemWidget):
         Rank1ItemWidget.add_plot_widget(self, **kwargs)
         self.curves = defaultdict(lambda: self.line_plt.plot([], pen=tuple(helpers.random_color())))
 
-    def update_plot(self, path, leaf):
+    def update(self, path, data, attrs=None):
         self.curve = self.curves[path]
-        Rank1ItemWidget.update_plot(self, leaf)
+        Rank1ItemWidget.update_plot(self, data, attrs)
 
 
 class ParametricItemWidget(Rank1ItemWidget):
@@ -321,9 +344,9 @@ class ParametricItemWidget(Rank1ItemWidget):
         Rank1ItemWidget.update_plot(self, leaf, refresh_labels=True)
 
 class Rank2ItemWidget(Rank1ItemWidget):
-    def __init__(self, ident, **kwargs):
-        Rank1ItemWidget.__init__(self, ident, **kwargs)
-        self.rank = 2
+    rank = 2
+    def __init__(self, ident, dock_area, **kwargs):
+        Rank1ItemWidget.__init__(self, ident, dock_area, **kwargs)
 
         self.histogram_check = Qt.QCheckBox('Histogram')
         self.histogram_check.stateChanged.connect(self.img_view.set_histogram)
@@ -352,26 +375,40 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.addWidget(self.line_plt)
         self.curve = None
 
-    def update_plot(self, leaf, refresh_labels=False, show_most_recent=None):
-        if leaf is None or leaf.data is None:
+    def update(self, data, attrs=None):
+        if attrs is None:
+            attrs = {}
+
+        x0 = attrs.get("x0", 0)
+        y0 = attrs.get("y0", 0)
+        xscale = attrs.get("xscale", 1)
+        yscale = attrs.get("yscale", 1)
+        xlabel = attrs.get("xlabel", "X")
+        ylabel = attrs.get("ylabel", "Y")
+        zlabel = attrs.get("zlabel", "Z")
+        plot_args = attrs.get("plot_args", {})
+
+        if data is None:
             self.clear_plot()
             return
 
-        if show_most_recent is not None:
-            if show_most_recent:
-                self.show_recent()
-            else:
-                self.show_accumulated()
+        #if show_most_recent is not None:
+        #    if show_most_recent:
+        #        self.show_recent()
+        #    else:
+        #        self.show_accumulated()
+
         if self.update_toggle.isChecked():
-            if refresh_labels:
-                self.img_view.setLabels(leaf.xlabel, leaf.ylabel, leaf.zlabel)
-            Rank1ItemWidget.update_plot(self, leaf.to_rank1())
+            self.img_view.setLabels(xlabel, ylabel, zlabel)
+            Rank1ItemWidget.update(self, data[-1,:], attrs)
+
             # self.img_view.imageItem.show()
             # Well, this is a hack. I'm not sure why autorange is disabled after setImage
             autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
-            self.img_view.setImage(leaf.data, autoRange=autorange, pos=[leaf.x0, leaf.y0], scale=[leaf.xscale, leaf.yscale])
+            self.img_view.setImage(data, autoRange=autorange, pos=[x0, y0], scale=[xscale, yscale])
             self.img_view.getView().vb.enableAutoRange(enable=autorange)
-            if leaf.data.shape[0] == 1:
+
+            if data.shape[0] == 1:
                 self.show_recent()
 
     def clear_plot(self):
@@ -392,11 +429,11 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.recent_button.show()
         self.accum_button.hide()
 
-def RankNItemWidget(rank, path, **kwargs):
+def RankNItemWidget(rank, path, dock_area, **kwargs):
     if rank == 1:
-        return Rank1ItemWidget(path, **kwargs)
+        return Rank1ItemWidget('/'.join(path), dock_area, **kwargs)
     elif rank == 2:
-        return Rank2ItemWidget(path, **kwargs)
+        return Rank2ItemWidget('/'.join(path), dock_area, **kwargs)
     else:
         raise Exception('No rank ' + str(rank) + ' item widget')
 

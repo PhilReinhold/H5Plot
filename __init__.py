@@ -1,5 +1,4 @@
-from interface import File, RemoteFile, LocalFile, DataClient
+from main import start
 
 if __name__ == "__main__":
-    from main import main
-    main()
+    start()

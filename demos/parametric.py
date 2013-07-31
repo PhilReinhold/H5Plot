@@ -1,13 +1,16 @@
-import H5Plot
 import numpy as np
+from dataserver import get_file
+from H5Plot import get_window
 import time
 
+f = get_file('stress_test.h5')
+win = get_window()
+win.config_plot('random scatter', scatter=True)
 pos = np.array([0, 0], dtype=np.float64)
-with H5Plot.RemoteFile('parametric_test') as f:
-    for _ in range(300):
-        time.sleep(.1)
-        f['random walk'].append_data(pos, parametric=True)
-        f['random scatter'].append_data(pos, scatter=True)
-        pos += np.random.normal(size=2)
+for _ in range(300):
+    time.sleep(.1)
+    f['random walk'].append(pos)
+    f['random scatter'].append(pos)
+    pos += np.random.normal(size=2)
 
 print 'Done'

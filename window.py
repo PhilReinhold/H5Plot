@@ -2,13 +2,15 @@ import time
 from PyQt4 import Qt
 from widgets import *
 import objectsharer as objsh
-
+import config
+import pickle
 
 class WindowDataGroup:
+    tree_structure = None
     def __init__(self, name, parent, proxy=None, attrs=None):
         self.name = name
         self.parent = parent
-        self.proxy = proxy if proxy is not None else parent.proxy
+        self.proxy = proxy if proxy is not None else parent.proxy[name]
         self.children = []
         self.is_dataset = False
 
@@ -17,57 +19,70 @@ class WindowDataGroup:
         else:
             self.path = parent.path + (name,)
 
-        if self.attrs is not None:
+        if attrs is not None:
             self.attrs = attrs
         else:
             self.attrs = {}
+        #self.attrs_widget = NodeEditWidget()
+        #self.tree_node = DataTreeNodeItem()
+
+class WindowPlot(object):
+    """
+    A plot living in the Dock Area
+    """
+    dock_area = None
+    def __init__(self, path, data, attrs):
+        self.path = path
+        self.data = data
+        self.attrs = attrs
+        self.rank = get_rank(data, self.is_parametric())
+        self.plot = RankNItemWidget(self.rank, self.path, self.dock_area)
+        self.plot.update(self.data, self.attrs)
+        self.attrs = {}
+
+        self.multiplots = []
+        self.parametric_plots = []
+
+    def update_with_data(self, data):
+        self.data = data
+        self.plot.update(self.data, self.attrs)
+
+    def is_parametric(self):
+        return self.attrs.get('parametric', False)
 
 
-class WindowDataSet(WindowDataGroup):
+class WindowDataSet(WindowDataGroup, WindowPlot):
+    """
+    A WindowPlot which is kept in sync with a
+    """
     def __init__(self, name, parent, proxy=None, attrs=None):
         WindowDataGroup.__init__(self, name, parent, proxy, attrs=attrs)
         self.is_dataset = True
         del self.children # DataSets have no children
 
-        self.data = self.proxy[:]
-        self.plot = RankNItemWidget(self.get_rank(), self.path)
-
-        self.multiplots = []
-        self.parametric_plots = []
+        data = self.proxy[:]
+        WindowPlot.__init__(self, self.path, data, self.attrs)
+        #self.attrs_widget = LeafEditWidget
 
     def update_data(self):
         self.data = self.proxy[:]
-        self.plot.update_plot(self.data)
+        self.update_with_data(self.data)
 
-    def get_rank(self):
-        if self.data is None or len(self.data) == 0:
-            return None
 
-        if self.is_parametric():
-            return len(self.data[0]) - 1
-        else:
-            return len(self.data.shape)
 
-    def is_parametric(self):
-        return self.attrs.get('parametric', False)
+def get_rank(data, parametric=False):
+    if data is None or len(data) == 0:
+        return None
+    elif parametric:
+        return len(data[0]) - 1
+    else:
+        return len(data.shape)
+
 
 class WindowInterface:
     def __init__(self, window):
         self.win = window
 
-# Removed from widgets, move to window
-        #self.dock_area = dock_area
-        #self.dock_area.add_dock_auto_location(self)
-
-    #def toggle_hide(self):
-    #    #self.setVisible(not(self.isVisible()))
-    #    if self.visible:
-    #        self.setParent(None)
-    #        self.label.setParent(None)
-    #        self.visible = False
-    #    else:
-    #        self.dock_area.add_dock_auto_location(self)
-    #        self.visible = True
 
 
 class PlotWindow(Qt.QMainWindow):
@@ -75,8 +90,37 @@ class PlotWindow(Qt.QMainWindow):
         Qt.QMainWindow.__init__(self)
         self.setup_ui()
         self.data_groups = {}
+        self.setup_shared_objects()
 
     def setup_ui(self):
+        # Sidebar / Dockarea
+        self.setCentralWidget(Qt.QSplitter())
+        self.sidebar = Qt.QWidget()
+        self.sidebar.setLayout(Qt.QVBoxLayout())
+        self.dock_area = MyDockArea()
+        WindowDataSet.dock_area = self.dock_area
+        self.centralWidget().addWidget(self.sidebar)
+        self.centralWidget().addWidget(self.dock_area)
+        self.centralWidget().setSizes([300, 1000])
+
+        # File-Oriented Buttons
+        self.load_file_button = Qt.QPushButton('Load File')
+        self.save_view_button = Qt.QPushButton('Save View')
+        self.load_view_button = Qt.QPushButton('Load View')
+        self.sidebar.layout().addWidget(self.load_file_button)
+        self.sidebar.layout().addWidget(self.save_view_button)
+        self.sidebar.layout().addWidget(self.load_view_button)
+
+        # Spinner setting number of plots to display simultaneously by default
+        self.max_plots_spinner = Qt.QSpinBox()
+        self.max_plots_spinner.setValue(6)
+        max_plots_widget = Qt.QWidget()
+        max_plots_widget.setLayout(Qt.QHBoxLayout())
+        max_plots_widget.layout().addWidget(Qt.QLabel('Maximum Plot Count'))
+        max_plots_widget.layout().addWidget(self.max_plots_spinner)
+        self.sidebar.layout().addWidget(max_plots_widget)
+
+        # Structure Tree
         self.structure_tree = Qt.QTreeWidget()
         self.structure_tree.setColumnCount(4)
         self.structure_tree.setHeaderLabels(['Name', 'Shape', 'Save?', 'Plot?'])
@@ -88,47 +132,32 @@ class PlotWindow(Qt.QMainWindow):
         self.structure_tree.setColumnWidth(1, 50)
         self.structure_tree.setColumnWidth(2, 50)
         self.structure_tree.setColumnWidth(3, 50)
+        self.sidebar.layout().addWidget(self.structure_tree)
 
-        self.dock_area = MyDockArea()
-        self.max_plots_spinner = Qt.QSpinBox()
-        self.max_plots_spinner.setValue(6)
-        max_plots_widget = Qt.QWidget()
-        max_plots_widget.setLayout(Qt.QHBoxLayout())
-        max_plots_widget.layout().addWidget(Qt.QLabel('Maximum Plot Count'))
-        max_plots_widget.layout().addWidget(self.max_plots_spinner)
-        #self.save_button = Qt.QPushButton('Save Selection')
-        #self.save_button.clicked.connect(self.save_selection)
-        #self.save_button.setEnabled(False)
+        # Plot-Oriented Buttons
         self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
         self.multiplot_button.clicked.connect(self.add_multiplot)
         self.multiplot_button.setEnabled(False)
-        #self.remove_button = Qt.QPushButton('Remove Selection')
-        #self.remove_button.clicked.connect(self.remove_selection)
-        #self.remove_button.setEnabled(False)
         self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
         self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
         self.parametric_button.setEnabled(False)
-
-        self.setCentralWidget(Qt.QSplitter())
-        self.sidebar = sidebar = Qt.QWidget()
-        sidebar.setLayout(Qt.QVBoxLayout())
-        sidebar.layout().addWidget(max_plots_widget)
-        sidebar.layout().addWidget(self.structure_tree)
-        #sidebar.layout().addWidget(self.save_button)
-        sidebar.layout().addWidget(self.multiplot_button)
-        #sidebar.layout().addWidget(self.remove_button)
-        sidebar.layout().addWidget(self.parametric_button)
-        self.centralWidget().addWidget(sidebar)
-        self.centralWidget().addWidget(self.dock_area)
-        self.centralWidget().setSizes([300, 1000])
+        self.sidebar.layout().addWidget(self.multiplot_button)
+        self.sidebar.layout().addWidget(self.parametric_button)
         self.current_edit_widget = None
 
-        file_menu = self.menuBar().addMenu('File')
+        # Status Bar
+        self.view_status = Qt.QLabel('Empty')
+        self.current_files = None
+        self.statusBar().addWidget(self.view_status)
+
+        # Menu bar
+        #file_menu = self.menuBar().addMenu('File')
         #Ifile_menu.addAction('Save').triggered.connect(lambda checked: self.background_client.save_all())
-        file_menu.addAction('Load').triggered.connect(lambda checked: self.load())
-        file_menu.addAction('Load (readonly)').triggered.connect(lambda checked: self.load(readonly=True))
+        #file_menu.addAction('Load').triggered.connect(lambda checked: self.load())
+        #file_menu.addAction('Load (readonly)').triggered.connect(lambda checked: self.load(readonly=True))
         #file_menu.addAction('Clear').triggered.connect(lambda checked: self.background_client.clear_all_data())
 
+        # Message Box
         self.message_box = Qt.QTextEdit()
         self.message_box.setReadOnly(True)
         self.message_box.setVisible(False)
@@ -141,31 +170,54 @@ class PlotWindow(Qt.QMainWindow):
 
     def setup_shared_objects(self):
         zbe = objsh.ZMQBackend()
-        zbe.start_server('127.0.0.1', 7777)
-        zbe.connect_to('tcp://127.0.0.1:55556')
+        zbe.start_server('127.0.0.1', 55563)
+        zbe.refresh_connection('tcp://127.0.0.1:55556')
+        #zbe.connect_to('tcp://127.0.0.1:55556')
         self.dataserver = objsh.helper.find_object('dataserver')
-        self.dataserver.connect('changed', self.get_data_changed)
+        self.dataserver.connect('path changed', self.get_data_changed)
         public_interface = WindowInterface(self)
         objsh.register(public_interface, 'plotwin')
         zbe.add_qt_timer()
+        #zbe.srv.close()
+        #sock.close()
+        #def closeServ(closeEvent):
+        #    print "CLOSING"
+        #    print zbe.srv
+        #    print zbe.srv.closed
+        #    print "CLOSED"
 
-    def get_data_changed(self, file, path):
+        #self.closeEvent = closeServ
+
+
+    def add_file(self, filename):
+        print filename, 'added'
+        proxy = self.dataserver.get_file(filename)
+        proxy.connect('changed', lambda k: self.get_data_changed((filename, k)))
+        self.data_groups[(filename,)] = WindowDataGroup((filename,), None, proxy=proxy)
+
+    def get_data_changed(self, path):
+        print 'Data Changed!', path
+        path = tuple(path)
         if path not in self.data_groups: # Then create it
-            if len(path) > 1 and path[:-1] not in self.data_groups:
-                self.create_group(path[:-1]) # Create parent
+            print 'Path not found', path
+            if path[:-1] not in self.data_groups:
+                self.create_group(path[:-1]) # Create parent if necessary
             parent = self.data_groups[path[:-1]]
             child = WindowDataSet(path[-1], parent)
             self.data_groups[path] = child
             parent.children.append(child)
 
         else:
+            print 'Path found', path, 'updating...'
             self.data_groups[path].update_data()
 
     def create_group(self, path):
+        print 'Create Group!', path
         if len(path) == 1:
             filename = path[0]
             proxy = self.dataserver.get_file(filename)
             self.data_groups[path] = WindowDataGroup(filename, None, proxy)
+            return
 
         if path[:-1] not in self.data_groups:
             self.create_group(path[:-1])
@@ -174,6 +226,33 @@ class PlotWindow(Qt.QMainWindow):
         child = WindowDataGroup(path[-1], parent)
         self.data_groups[path] = child
         parent.chidren.append(child)
+
+    ################
+    # File Buttons #
+    ################
+
+    def load(self):
+        filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
+                                                        config.h5file_directory, config.h5file_filter))
+        if not filename:
+            return
+        proxy = self.dataserver.get_file(filename)
+        self.data_groups[(filename,)] = WindowDataGroup(filename, None, proxy=proxy)
+
+    def save_view(self):
+        filename = str(Qt.QFileDialog().getSaveFileName(self, 'Save View file'))
+        open_plots = []
+        for group in self.data_groups.values():
+            if group.plot.parent() is not None:
+                open_plots.append(group.path)
+        dock_state = self.dock_area.saveState()
+        view_state = {
+            'open_plots': open_plots,
+            'dock_state': dock_state,
+        }
+        with open(filename, 'w') as f:
+            pickle.Pickler(f).save(view_state)
+
 
     ##############
     # Multiplots #
@@ -252,12 +331,6 @@ class PlotWindow(Qt.QMainWindow):
         attr_widget.close()
         attr_widget.destroy()
 
-    #def load(self, readonly=False):
-    #    filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
-    #                                                    config.h5file_directory, config.h5file_filter))
-    #    if not filename:
-    #        return
-    #    self.background_client.load_h5file(filename, readonly=readonly)
 
     def add_tree_widget(self, path, data=False, shape=(), save=True, plot=True):
         if path in self.tree_widgets:
