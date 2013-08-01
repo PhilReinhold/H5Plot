@@ -1,4 +1,5 @@
-from main import start
+from window import run_plotwindow
+from interface import plotwindow_client
 
 if __name__ == "__main__":
-    start()
+    run_plotwindow()

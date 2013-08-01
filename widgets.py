@@ -202,7 +202,8 @@ class LeafEditWidget(NodeEditWidget):
     #     return params
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
-    def __init__(self, ident, dock_area, **kwargs):
+    dock_area = None
+    def __init__(self, ident, **kwargs):
         if len(ident) > 25:
             name = '... ' + ident.split('/')[-1]
         else:
@@ -225,7 +226,6 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
         self.buttons_widget.layout().addWidget(self.update_toggle)
         #self.buttons_widget.layout().addWidget(self.autoscale_toggle)
         self.addWidget(self.buttons_widget)
-        self.dock_area = dock_area
         self.dock_area.add_dock_auto_location(self)
 
     def is_visible(self):
@@ -256,8 +256,8 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
 
 class Rank1ItemWidget(ItemWidget):
     rank = 1
-    def __init__(self, ident, dock_area, **kwargs):
-        ItemWidget.__init__(self, ident, dock_area, **kwargs)
+    def __init__(self, ident, **kwargs):
+        ItemWidget.__init__(self, ident, **kwargs)
 
     def add_plot_widget(self, **kwargs):
         #self.line_plt = pyqtgraph.PlotWidget(title=self.ident, **kwargs)
@@ -345,8 +345,8 @@ class ParametricItemWidget(Rank1ItemWidget):
 
 class Rank2ItemWidget(Rank1ItemWidget):
     rank = 2
-    def __init__(self, ident, dock_area, **kwargs):
-        Rank1ItemWidget.__init__(self, ident, dock_area, **kwargs)
+    def __init__(self, ident, **kwargs):
+        Rank1ItemWidget.__init__(self, ident, **kwargs)
 
         self.histogram_check = Qt.QCheckBox('Histogram')
         self.histogram_check.stateChanged.connect(self.img_view.set_histogram)
@@ -429,11 +429,11 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.recent_button.show()
         self.accum_button.hide()
 
-def RankNItemWidget(rank, path, dock_area, **kwargs):
+def RankNItemWidget(rank, path, **kwargs):
     if rank == 1:
-        return Rank1ItemWidget('/'.join(path), dock_area, **kwargs)
+        return Rank1ItemWidget('/'.join(path), **kwargs)
     elif rank == 2:
-        return Rank2ItemWidget('/'.join(path), dock_area, **kwargs)
+        return Rank2ItemWidget('/'.join(path), **kwargs)
     else:
         raise Exception('No rank ' + str(rank) + ' item widget')
 

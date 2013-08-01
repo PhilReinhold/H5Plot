@@ -4,48 +4,86 @@ from widgets import *
 import objectsharer as objsh
 import config
 import pickle
+import sys
+import logging
 
-class WindowDataGroup:
-    tree_structure = None
-    def __init__(self, name, parent, proxy=None, attrs=None):
+class DataTreeItem(object):
+    """
+    An object with a presence in the data tree
+    """
+    data_tree_widget = None
+    def __init__(self, name, parent=None, attrs=None):
+        if hasattr(self, 'tree_item'):
+            return
         self.name = name
         self.parent = parent
-        self.proxy = proxy if proxy is not None else parent.proxy[name]
-        self.children = []
-        self.is_dataset = False
+        self.tree_item = Qt.QTreeWidgetItem([name, "", ""])
+        if attrs is None:
+            self.attrs = {}
+        else:
+            self.attrs = attrs
 
         if parent is None:
             self.path = (name,)
+            self.data_tree_widget.addTopLevelItem(self.tree_item)
         else:
             self.path = parent.path + (name,)
+            parent.tree_item.addChild(self.tree_item)
 
-        if attrs is not None:
-            self.attrs = attrs
+    def update_tree_item(self, shape="", visible=""):
+        self.tree_item.setText(1, str(shape))
+        self.tree_item.setText(2, str(visible))
+
+
+class WindowDataGroup(DataTreeItem):
+    """
+    A Data Tree Item corresponding to a (remote) shared DataGroup
+    """
+    def __init__(self, name, parent, proxy=None, **kwargs):
+        super(WindowDataGroup, self).__init__(name, parent, **kwargs)
+        logging.debug('WindowDataGroup %s' % name)
+        DataTreeItem.__init__(self, name, parent)
+        self.name = name
+        self.parent = parent
+
+        if proxy is None:
+            if parent is None:
+                raise ValueError("Top Level WindowDataGroups must be provided with a proxy")
+            self.proxy = parent.proxy[name]
         else:
-            self.attrs = {}
-        #self.attrs_widget = NodeEditWidget()
-        #self.tree_node = DataTreeNodeItem()
+            self.proxy = proxy
 
-class WindowPlot(object):
+        self.children = []
+        self.is_dataset = False
+
+        self.attrs = self.proxy.get_attrs()
+        #self.attrs_widget = NodeEditWidget()
+
+class WindowPlot(DataTreeItem):
     """
     A plot living in the Dock Area
     """
-    dock_area = None
-    def __init__(self, path, data, attrs):
-        self.path = path
-        self.data = data
-        self.attrs = attrs
-        self.rank = get_rank(data, self.is_parametric())
-        self.plot = RankNItemWidget(self.rank, self.path, self.dock_area)
-        self.plot.update(self.data, self.attrs)
+    def __init__(self, name, parent, **kwargs):
+        super(WindowPlot, self).__init__(name, parent, **kwargs)
+        if not hasattr(self, 'tree_item'):
+            DataTreeItem.__init__(self, name, parent)
+        self.data = None
+        self.rank = None
+        self.plot = None
         self.attrs = {}
 
         self.multiplots = []
         self.parametric_plots = []
 
-    def update_with_data(self, data):
+    def set_data(self, data):
         self.data = data
+        self.rank = get_rank(data, self.is_parametric())
+        if self.plot is None:
+            self.plot = RankNItemWidget(self.rank, self.path)
         self.plot.update(self.data, self.attrs)
+
+    def set_attrs(self, attrs):
+        self.attrs = attrs
 
     def is_parametric(self):
         return self.attrs.get('parametric', False)
@@ -53,20 +91,28 @@ class WindowPlot(object):
 
 class WindowDataSet(WindowDataGroup, WindowPlot):
     """
-    A WindowPlot which is kept in sync with a
+    A WindowPlot which is kept in sync with a shared h5py DataSet
+    :param name: TODO
+    :param parent:
+    :param proxy:
+    :param attrs:
     """
-    def __init__(self, name, parent, proxy=None, attrs=None):
-        WindowDataGroup.__init__(self, name, parent, proxy, attrs=attrs)
-        self.is_dataset = True
-        del self.children # DataSets have no children
+    def __init__(self, name, parent, **kwargs):
+        super(WindowDataSet, self).__init__(name, parent, **kwargs)
+        logging.debug('WindowDataSet %s' % name)
 
-        data = self.proxy[:]
-        WindowPlot.__init__(self, self.path, data, self.attrs)
-        #self.attrs_widget = LeafEditWidget
+        # Override DataGroup properties
+        self.is_dataset = True
+        self.children = None
+
+        self.update_data()
+        self.update_tree_item()
+
 
     def update_data(self):
         self.data = self.proxy[:]
-        self.update_with_data(self.data)
+        print self.data
+        self.set_data(self.data)
 
 
 
@@ -83,6 +129,11 @@ class WindowInterface:
     def __init__(self, window):
         self.win = window
 
+    def plot(self, name, data):
+        pass
+
+    def quit(self):
+        sys.exit()
 
 
 class PlotWindow(Qt.QMainWindow):
@@ -98,10 +149,15 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar = Qt.QWidget()
         self.sidebar.setLayout(Qt.QVBoxLayout())
         self.dock_area = MyDockArea()
-        WindowDataSet.dock_area = self.dock_area
+        ItemWidget.dock_area = self.dock_area
         self.centralWidget().addWidget(self.sidebar)
         self.centralWidget().addWidget(self.dock_area)
         self.centralWidget().setSizes([300, 1000])
+
+        # Server-Oriented Buttons
+        self.connect_dataserver_button = Qt.QPushButton('Connect to Data Server')
+        self.connect_dataserver_button.clicked.connect(self.connect_dataserver)
+        self.sidebar.layout().addWidget(self.connect_dataserver_button)
 
         # File-Oriented Buttons
         self.load_file_button = Qt.QPushButton('Load File')
@@ -121,18 +177,19 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar.layout().addWidget(max_plots_widget)
 
         # Structure Tree
-        self.structure_tree = Qt.QTreeWidget()
-        self.structure_tree.setColumnCount(4)
-        self.structure_tree.setHeaderLabels(['Name', 'Shape', 'Save?', 'Plot?'])
-        self.structure_tree.itemClicked.connect(self.change_edit_widget)
-        self.structure_tree.itemDoubleClicked.connect(self.toggle_item)
-        self.structure_tree.itemSelectionChanged.connect(self.configure_tree_buttons)
-        self.structure_tree.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
-        self.structure_tree.setColumnWidth(0, 200)
-        self.structure_tree.setColumnWidth(1, 50)
-        self.structure_tree.setColumnWidth(2, 50)
-        self.structure_tree.setColumnWidth(3, 50)
-        self.sidebar.layout().addWidget(self.structure_tree)
+        self.data_tree_widget = Qt.QTreeWidget()
+        self.data_tree_widget.setColumnCount(4)
+        self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Save?', 'Plot?'])
+        self.data_tree_widget.itemClicked.connect(self.change_edit_widget)
+        self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
+        self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_buttons)
+        self.data_tree_widget.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
+        self.data_tree_widget.setColumnWidth(0, 200)
+        self.data_tree_widget.setColumnWidth(1, 50)
+        self.data_tree_widget.setColumnWidth(2, 50)
+        self.data_tree_widget.setColumnWidth(3, 50)
+        DataTreeItem.data_tree_widget = self.data_tree_widget
+        self.sidebar.layout().addWidget(self.data_tree_widget)
 
         # Plot-Oriented Buttons
         self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
@@ -169,15 +226,13 @@ class PlotWindow(Qt.QMainWindow):
         action.triggered.connect(self.message_box.setVisible)
 
     def setup_shared_objects(self):
-        zbe = objsh.ZMQBackend()
-        zbe.start_server('127.0.0.1', 55563)
-        zbe.refresh_connection('tcp://127.0.0.1:55556')
+        self.zbe = objsh.ZMQBackend()
+        self.zbe.start_server('127.0.0.1', 55563)
+        self.connect_dataserver()
         #zbe.connect_to('tcp://127.0.0.1:55556')
-        self.dataserver = objsh.helper.find_object('dataserver')
-        self.dataserver.connect('path changed', self.get_data_changed)
         public_interface = WindowInterface(self)
         objsh.register(public_interface, 'plotwin')
-        zbe.add_qt_timer()
+        self.zbe.add_qt_timer()
         #zbe.srv.close()
         #sock.close()
         #def closeServ(closeEvent):
@@ -187,6 +242,16 @@ class PlotWindow(Qt.QMainWindow):
         #    print "CLOSED"
 
         #self.closeEvent = closeServ
+    def connect_dataserver(self):#, addr='127.0.0.1', port=55556):
+        try:
+            addr = '127.0.0.1'
+            port = 55556
+            self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
+            self.dataserver = objsh.helper.find_object('dataserver')
+            self.dataserver.connect('data-changed', self.get_data_changed)
+        except ValueError:
+            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver").exec_()
+            return
 
 
     def add_file(self, filename):
@@ -195,8 +260,9 @@ class PlotWindow(Qt.QMainWindow):
         proxy.connect('changed', lambda k: self.get_data_changed((filename, k)))
         self.data_groups[(filename,)] = WindowDataGroup((filename,), None, proxy=proxy)
 
-    def get_data_changed(self, path):
-        print 'Data Changed!', path
+    def get_data_changed(self, filename, pathname):
+        path = (filename,) + tuple(pathname.split('/')[1:])
+        print 'Data Changed!', pathname
         path = tuple(path)
         if path not in self.data_groups: # Then create it
             print 'Path not found', path
@@ -259,7 +325,7 @@ class PlotWindow(Qt.QMainWindow):
     ##############
 
     def add_multiplot(self, parametric=False):
-        selection = self.structure_tree.selectedItems()
+        selection = self.data_tree_widget.selectedItems()
         paths = tuple(item.strpath for item in selection)
         if parametric:
             widget = ParametricItemWidget(selection[0].path, selection[1].path, self.dock_area)
@@ -287,7 +353,7 @@ class PlotWindow(Qt.QMainWindow):
             widget.update_plot(path, leaf)
 
     def configure_tree_buttons(self):
-        selection = self.structure_tree.selectedItems()
+        selection = self.data_tree_widget.selectedItems()
         save = len(selection) > 0
         multiplot = len(selection) > 1
         multiplot = multiplot and all(i.is_leaf() for i in selection)
@@ -324,7 +390,7 @@ class PlotWindow(Qt.QMainWindow):
         if item.parent() and item.parent().childCount == 1:
             self.remove_item(path[:-1])
 
-        root = self.structure_tree.invisibleRootItem()
+        root = self.data_tree_widget.invisibleRootItem()
         (item.parent() or root).removeChild(item)
 
         attr_widget = self.attrs_widgets.pop(path)
@@ -346,7 +412,7 @@ class PlotWindow(Qt.QMainWindow):
         else:
             item = DataTreeLeafItem([path[-1]])
 
-        parent = item.parent() or self.structure_tree.invisibleRootItem()
+        parent = item.parent() or self.data_tree_widget.invisibleRootItem()
         parent.addChild(item)
         parent.setExpanded(True)
 
@@ -413,22 +479,22 @@ class PlotWindow(Qt.QMainWindow):
                     break
 
     def _test_edit_widget(self, path):
-        self.structure_tree.itemClicked.emit(self.tree_widgets[path], 0)
+        self.data_tree_widget.itemClicked.emit(self.tree_widgets[path], 0)
         self.current_edit_widget.commit_button.clicked.emit(False)
 
     def _test_show_hide(self, path):
-        self.structure_tree.itemDoubleClicked.emit(self.tree_widgets[path], 0)
+        self.data_tree_widget.itemDoubleClicked.emit(self.tree_widgets[path], 0)
         time.sleep(1)
-        self.structure_tree.itemDoubleClicked.emit(self.tree_widgets[path], 0)
+        self.data_tree_widget.itemDoubleClicked.emit(self.tree_widgets[path], 0)
 
     def _test_multiplot(self, paths, parametric=False):
         for p in paths:
-            self.structure_tree.setItemSelected(self.tree_widgets[p], True)
+            self.data_tree_widget.setItemSelected(self.tree_widgets[p], True)
         self.add_multiplot(parametric=parametric)
 
     def _test_save_selection(self, paths):
         for p in paths:
-            self.structure_tree.setItemSelected(self.tree_widgets[p], True)
+            self.data_tree_widget.setItemSelected(self.tree_widgets[p], True)
         self.save_selection()
 
 
@@ -467,3 +533,17 @@ widget_tools = {
         "read" : "value",
         "change_signal" : "valueChanged"},
     }
+
+def run_plotwindow():
+    #sys.excepthook = excepthook
+    app = Qt.QApplication([])
+    win = PlotWindow()
+    win.show()
+    #win.showMaximized()
+    win.setFixedSize(700, 500)
+    app.connect(app, Qt.SIGNAL("lastWindowClosed()"), win, Qt.SIGNAL("lastWindowClosed()"))
+    return app.exec_()
+
+
+if __name__ == "__main__":
+    sys.exit(run_plotwindow())
