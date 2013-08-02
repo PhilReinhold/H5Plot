@@ -9,27 +9,9 @@ import pyqtgraph.dockarea
 import numpy as np
 
 import helpers
-from model import DataTreeLeaf
 
-class DataTreeLeafItem(Qt.QTreeWidgetItem):
-    def update_fields(self, shape, save, plot):
-        self.setText(1, str(shape))
-        self.setText(2, str(save))
-        self.setText(3, str(plot))
-
-    @property
-    def path(self):
-        if self.parent() is None:
-            return (str(self.text(0)),)
-        else:
-            return self.parent().path + (str(self.text(0)),)
-
-    @property
-    def strpath(self):
-        return '/'.join(map(str, self.path))
-
-Qt.QTreeWidgetItem.is_leaf = lambda item: str(item.text(1)) != ""
-Qt.QTreeWidgetItem.getChildren = lambda item: [item.child(i) for i in range(item.childCount())]
+#Qt.QTreeWidgetItem.is_leaf = lambda item: str(item.text(1)) != ""
+#Qt.QTreeWidgetItem.getChildren = lambda item: [item.child(i) for i in range(item.childCount())]
 
 class MyDockArea(pyqtgraph.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
@@ -51,9 +33,6 @@ class NodeEditWidget(Qt.QFrame):
         self.setFrameStyle(Qt.QFrame.Panel)
         self.path = path
         self.spin_widgets = {}
-        self.text_widgets = {}
-        from window import TempDataClient
-        self.background_client = TempDataClient()
 
         self.setLayout(Qt.QVBoxLayout())
         self.layout().addWidget(Qt.QLabel('Editing ' + '/'.join(self.path)))
@@ -128,7 +107,8 @@ class NodeEditWidget(Qt.QFrame):
                     value = float(value)
                 except ValueError:
                     pass
-        self.background_client.set_attr(self.path, name, value)
+        #self.background_client.set_attr(self.path, name, value)
+        # TODO: Actually set the attr!
         if self.new_attr:
             self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, str(value), str(type(value))]))
         else:
@@ -266,7 +246,6 @@ class Rank1ItemWidget(ItemWidget):
         self.curve = None
 
     def update(self, data, attrs=None):
-        print 'UPDATE', self.ident, data.shape
         if attrs is None:
             attrs = {}
 

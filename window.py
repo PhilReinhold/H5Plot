@@ -20,28 +20,44 @@ class DataTreeItem(object):
     An object with a presence in the data tree
     """
     data_tree_widget = None
+    attrs_widget_layout = None
     def __init__(self, name, parent=None, attrs=None):
         if hasattr(self, 'tree_item'):
             return
         self.name = name
         self.parent = parent
-        self.tree_item = Qt.QTreeWidgetItem([name, "", ""])
+        self.path = parent.path if parent is not None else ()
+        self.path += (name,)
+        self.tree_item = DataTreeWidgetItem(self.path, [name, "", ""])
+
         if attrs is None:
             self.attrs = {}
         else:
             self.attrs = attrs
 
+        self.attrs_widget = NodeEditWidget(self.path, self.attrs)
+        self.attrs_widget.setVisible(False)
+        self.attrs_widget_layout.addWidget(self.attrs_widget)
+
         if parent is None:
-            self.path = (name,)
             self.data_tree_widget.addTopLevelItem(self.tree_item)
         else:
-            self.path = parent.path + (name,)
             parent.tree_item.addChild(self.tree_item)
 
     def update_tree_item(self, shape="", visible=""):
         self.tree_item.setText(1, str(shape))
         self.tree_item.setText(2, str(visible))
 
+class DataTreeWidgetItem(Qt.QTreeWidgetItem):
+    def __init__(self, path, *args, **kwargs):
+        print args, kwargs
+        Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
+        self.path = path
+
+    def update_fields(self, shape, save, plot):
+        self.setText(1, str(shape))
+        self.setText(2, str(save))
+        self.setText(3, str(plot))
 
 class WindowDataGroup(DataTreeItem):
     """
@@ -65,7 +81,6 @@ class WindowDataGroup(DataTreeItem):
         self.is_dataset = False
 
         self.attrs = self.proxy.get_attrs()
-        #self.attrs_widget = NodeEditWidget()
 
 class WindowPlot(DataTreeItem):
     """
@@ -210,6 +225,13 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar.layout().addWidget(self.parametric_button)
         self.current_edit_widget = None
 
+        # Attribute Editor Area
+        attrs_widget_box = Qt.QWidget()
+        attrs_widget_box.setLayout(Qt.QVBoxLayout())
+        DataTreeItem.attrs_widget_layout = attrs_widget_box.layout()
+        self.current_edit_widget = None
+        self.sidebar.layout().addWidget(attrs_widget_box)
+
         # Status Bar
         self.view_status = Qt.QLabel('Empty')
         self.current_files = None
@@ -232,6 +254,10 @@ class PlotWindow(Qt.QMainWindow):
         action.setCheckable(True)
         action.setChecked(False)
         action.triggered.connect(self.message_box.setVisible)
+
+    #######################
+    # Data Server Actions #
+    #######################
 
     def setup_shared_objects(self):
         self.zbe = objsh.ZMQBackend()
@@ -286,6 +312,19 @@ class PlotWindow(Qt.QMainWindow):
         child = WindowDataGroup(path[-1], parent)
         self.data_groups[path] = child
         parent.chidren.append(child)
+
+    ####################
+    # Attribute Editor #
+    ####################
+
+    def change_edit_widget(self, item, col):
+        logger.debug('Changing edit widget to %s' % '/'.join(item.path))
+        if self.current_edit_widget is not None:
+            self.current_edit_widget.hide()
+
+        widget = self.data_groups[item.path].attrs_widget
+        self.current_edit_widget = widget
+        widget.show()
 
     ################
     # File Buttons #
@@ -348,17 +387,13 @@ class PlotWindow(Qt.QMainWindow):
 
     def configure_tree_buttons(self):
         selection = self.data_tree_widget.selectedItems()
-        save = len(selection) > 0
         multiplot = len(selection) > 1
         multiplot = multiplot and all(i.is_leaf() for i in selection)
         multiplot = multiplot and all(self.plot_widgets[i.path].rank == 1 for i in selection)
-        remove = len(selection) > 0
         parametric = len(selection) == 2
         parametric = parametric and all(i.is_leaf() for i in selection)
         parametric = parametric and all(self.plot_widgets[i.path].rank == 1 for i in selection)
-        self.save_button.setEnabled(save)
         self.multiplot_button.setEnabled(multiplot)
-        self.remove_button.setEnabled(remove)
         self.parametric_button.setEnabled(parametric)
 
     #def remove_selection(self):
@@ -391,30 +426,6 @@ class PlotWindow(Qt.QMainWindow):
         attr_widget.close()
         attr_widget.destroy()
 
-
-    def add_tree_widget(self, path, data=False, shape=(), save=True, plot=True):
-        if path in self.tree_widgets:
-            if data: # Update the description
-                self.tree_widgets[path].update_fields(shape, save, plot)
-            return
-
-        if path[:-1] not in self.tree_widgets: # Make parent if it doesn't exist
-            self.add_tree_widget(path[:-1])
-
-        if data:
-            item = DataTreeLeafItem([path[-1], str(shape), str(save), str(plot)])
-        else:
-            item = DataTreeLeafItem([path[-1]])
-
-        parent = item.parent() or self.data_tree_widget.invisibleRootItem()
-        parent.addChild(item)
-        parent.setExpanded(True)
-
-        if not data:
-            item.setFirstColumnSpanned(True)
-
-        self.tree_widgets[path] = item
-
     def toggle_path(self, path):
         self.toggle_item(self.tree_widgets[path], 0)
 
@@ -427,24 +438,6 @@ class PlotWindow(Qt.QMainWindow):
         else:
             for child in item.getChildren():
                 self.toggle_item(child, col)
-
-    def change_edit_widget(self, item, col):
-        path = item.path
-        if self.current_edit_widget is not None:
-            self.current_edit_widget.hide()
-
-        if path not in self.attrs_widgets:
-            if item.is_leaf:
-                widget = LeafEditWidget(path, {})
-            else:
-                widget = NodeEditWidget(path, {})
-            self.sidebar.layout().addWidget(widget)
-            self.attrs_widgets[path] = widget
-        else:
-            widget = self.attrs_widgets[path]
-            widget.show()
-
-        self.current_edit_widget = widget
 
     def add_plot_widget(self, path, rank=1, **kwargs):
         if path in self.plot_widgets:
