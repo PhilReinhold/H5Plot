@@ -83,15 +83,19 @@ class WindowDataGroup(WindowItem):
             self.proxy = proxy
         self.attrs_widget.set_proxy(self.proxy)
 
-        self.children = {}
         self.attrs = self.proxy.get_attrs()
 
-        self.proxy.connect('changed', self.child_changed)
-        self.proxy.connect('group-added', self.add_group)
-        #TODO connect removed
-        self.proxy.connect('attrs-changed', self.update_attrs)
+        if not isinstance(self, WindowDataSet):
+            self.children = {}
+            for name in self.proxy.keys():
+                self.update_child(name)
 
-    def child_changed(self, key):
+            self.proxy.connect('changed', self.update_child)
+            self.proxy.connect('group-added', self.add_group)
+            #TODO connect removed
+            self.proxy.connect('attrs-changed', self.update_attrs)
+
+    def update_child(self, key):
         if key not in self.children:
             self.add_dataset(key)
         self.children[key].update_data()
@@ -152,7 +156,6 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     def __init__(self, name, parent, **kwargs):
         super(WindowDataSet, self).__init__(name, parent, **kwargs)
         logger.debug('Initializing WindowDataSet %s' % '/'.join(self.path))
-        self.children = None
         self.update_data()
 
     def update_data(self):
@@ -301,14 +304,17 @@ class PlotWindow(Qt.QMainWindow):
             self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
             self.dataserver = objsh.helper.find_object('dataserver')
             self.dataserver.connect('file-added', self.add_file)
+            for filename, proxy in self.dataserver.list_files(names_only=False).items():
+                self.add_file(filename, proxy)
             #self.dataserver.connect('data-changed', self.get_data_changed)
             #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
-        except ValueError:
-            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver").exec_()
+        except ValueError, e:
+            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver\n" + str(e)).exec_()
             return
 
-    def add_file(self, filename):
-        proxy = self.dataserver.get_file(filename)
+    def add_file(self, filename, proxy=None):
+        if proxy is None:
+            proxy = self.dataserver.get_file(filename)
         WindowDataGroup(filename, None, proxy)
 
 #    def get_data_changed(self, filename, pathname):
