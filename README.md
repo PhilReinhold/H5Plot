@@ -14,27 +14,27 @@ Usage
 -----
 Run dataserver
 
-  python dataserver/dataserver.py
+    python dataserver/dataserver.py
 
 or
 
-  from dataserver import run_dataserver
-  run_dataserver()
+    from dataserver import run_dataserver
+    run_dataserver()
 
 Run gui
 
-  python H5Plot/window.py
+    python H5Plot/window.py
 
  or
 
-   from H5Plot import run_plotwindow
-   run_plotwindow()
+     from H5Plot import run_plotwindow
+     run_plotwindow()
 
 Send Data to DataServer
 
-  from dataserver import get_file
-  f = get_file('test.h5')
-  f['dataset'] = [1,3,2,4]
+    from dataserver import get_file
+    f = get_file('test.h5')
+    f['dataset'] = [1,3,2,4]
 
 
 
