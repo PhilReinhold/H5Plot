@@ -48,16 +48,12 @@ class DataTreeItem(object):
         self.tree_item.setText(1, str(shape))
         self.tree_item.setText(2, str(visible))
 
+
 class DataTreeWidgetItem(Qt.QTreeWidgetItem):
     def __init__(self, path, *args, **kwargs):
-        print args, kwargs
         Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
         self.path = path
 
-    def update_fields(self, shape, save, plot):
-        self.setText(1, str(shape))
-        self.setText(2, str(save))
-        self.setText(3, str(plot))
 
 class WindowDataGroup(DataTreeItem):
     """
@@ -136,6 +132,7 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         logger.debug('Updating data at %s' % '/'.join(self.path))
         self.data = self.proxy[:]
         self.set_data(self.data)
+        self.update_tree_item(shape=self.data.shape)
 
 
 
