@@ -33,6 +33,7 @@ class NodeEditWidget(Qt.QFrame):
         self.setFrameStyle(Qt.QFrame.Panel)
         self.path = path
         self.spin_widgets = {}
+        self.proxy = None
 
         self.setLayout(Qt.QVBoxLayout())
         self.layout().addWidget(Qt.QLabel('Editing ' + '/'.join(self.path)))
@@ -66,6 +67,9 @@ class NodeEditWidget(Qt.QFrame):
         self.layout().addWidget(add_attr_box)
 
         self.attr_list_items = {}
+
+    def set_proxy(self, proxy):
+        self.proxy = proxy
 
     def update(self, attrs):
         for k, v in attrs.items():
@@ -109,16 +113,18 @@ class NodeEditWidget(Qt.QFrame):
                     value = float(value)
                 except ValueError:
                     pass
-        #self.background_client.set_attr(self.path, name, value)
-        # TODO: Actually set the attr!
-        if self.new_attr:
-            self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, str(value), str(type(value))]))
+
+        if self.proxy is not None:
+            self.proxy.set_attrs(**{name:value})
         else:
-            i = self.attr_list.findItems(name, Qt.Qt.MatchExactly, 0)[0]
-            i.setText(1, str(value))
-        self.attr_name_edit.setText("")
-        self.attr_value_edit.setText("")
-        return name, value
+            if self.new_attr:
+                self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, str(value), str(type(value))]))
+            else:
+                i = self.attr_list.findItems(name, Qt.Qt.MatchExactly, 0)[0]
+                i.setText(1, str(value))
+            self.attr_name_edit.setText("")
+            self.attr_value_edit.setText("")
+            return name, value
 
 
 class LeafEditWidget(NodeEditWidget):

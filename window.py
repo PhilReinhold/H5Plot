@@ -77,6 +77,7 @@ class WindowDataGroup(DataTreeItem):
             self.proxy = parent.proxy[name]
         else:
             self.proxy = proxy
+        self.attrs_widget.set_proxy(self.proxy)
 
         self.children = []
         self.attrs = self.proxy.get_attrs()
@@ -161,6 +162,9 @@ class WindowInterface:
 
 
 class PlotWindow(Qt.QMainWindow):
+    """
+    A window for viewing and plotting DataSets and DataGroups shared by a DataServer
+    """
     def __init__(self):
         Qt.QMainWindow.__init__(self)
         self.setup_ui()
