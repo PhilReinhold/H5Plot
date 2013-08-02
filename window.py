@@ -540,7 +540,7 @@ def run_plotwindow():
     win = PlotWindow()
     win.show()
     #win.showMaximized()
-    win.setFixedSize(700, 500)
+    win.setMinimumSize(700, 500)
     app.connect(app, Qt.SIGNAL("lastWindowClosed()"), win, Qt.SIGNAL("lastWindowClosed()"))
     return app.exec_()
 
