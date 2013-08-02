@@ -7,6 +7,14 @@ import pickle
 import sys
 import logging
 
+logger = logging.getLogger("Plot Window")
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(name)s:%(levelname)s:%(message)s')
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 class DataTreeItem(object):
     """
     An object with a presence in the data tree
@@ -41,7 +49,7 @@ class WindowDataGroup(DataTreeItem):
     """
     def __init__(self, name, parent, proxy=None, **kwargs):
         super(WindowDataGroup, self).__init__(name, parent, **kwargs)
-        logging.debug('WindowDataGroup %s' % name)
+        logger.debug('Initializing WindowDataGroup %s' % '/'.join(self.path))
         DataTreeItem.__init__(self, name, parent)
         self.name = name
         self.parent = parent
@@ -99,7 +107,7 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     """
     def __init__(self, name, parent, **kwargs):
         super(WindowDataSet, self).__init__(name, parent, **kwargs)
-        logging.debug('WindowDataSet %s' % name)
+        logger.debug('Initializing WindowDataSet %s' % '/'.join(self.path))
 
         # Override DataGroup properties
         self.is_dataset = True
@@ -110,8 +118,8 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
 
 
     def update_data(self):
+        logger.debug('Updating data at %s' % '/'.join(self.path))
         self.data = self.proxy[:]
-        print self.data
         self.set_data(self.data)
 
 
@@ -233,15 +241,7 @@ class PlotWindow(Qt.QMainWindow):
         public_interface = WindowInterface(self)
         objsh.register(public_interface, 'plotwin')
         self.zbe.add_qt_timer()
-        #zbe.srv.close()
-        #sock.close()
-        #def closeServ(closeEvent):
-        #    print "CLOSING"
-        #    print zbe.srv
-        #    print zbe.srv.closed
-        #    print "CLOSED"
 
-        #self.closeEvent = closeServ
     def connect_dataserver(self):#, addr='127.0.0.1', port=55556):
         try:
             addr = '127.0.0.1'
@@ -253,19 +253,13 @@ class PlotWindow(Qt.QMainWindow):
             Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver").exec_()
             return
 
-
-    def add_file(self, filename):
-        print filename, 'added'
-        proxy = self.dataserver.get_file(filename)
-        proxy.connect('changed', lambda k: self.get_data_changed((filename, k)))
-        self.data_groups[(filename,)] = WindowDataGroup((filename,), None, proxy=proxy)
-
     def get_data_changed(self, filename, pathname):
         path = (filename,) + tuple(pathname.split('/')[1:])
-        print 'Data Changed!', pathname
+        logger.debug('Data Changed at %s' % '/'.join(path))
         path = tuple(path)
         if path not in self.data_groups: # Then create it
-            print 'Path not found', path
+            logger.debug('Path not found: %s' % '/'.join(path))
+            logger.debug(repr(self.data_groups))
             if path[:-1] not in self.data_groups:
                 self.create_group(path[:-1]) # Create parent if necessary
             parent = self.data_groups[path[:-1]]
@@ -278,7 +272,7 @@ class PlotWindow(Qt.QMainWindow):
             self.data_groups[path].update_data()
 
     def create_group(self, path):
-        print 'Create Group!', path
+        logger.debug('Create Group! %s' % '/'.join(path))
         if len(path) == 1:
             filename = path[0]
             proxy = self.dataserver.get_file(filename)
