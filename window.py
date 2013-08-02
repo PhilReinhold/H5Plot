@@ -43,6 +43,7 @@ class DataTreeItem(object):
             self.data_tree_widget.addTopLevelItem(self.tree_item)
         else:
             parent.tree_item.addChild(self.tree_item)
+            parent.tree_item.setExpanded(True)
 
     def update_tree_item(self, shape="", visible=""):
         self.tree_item.setText(1, str(shape))
@@ -62,7 +63,6 @@ class WindowDataGroup(DataTreeItem):
     def __init__(self, name, parent, proxy=None, **kwargs):
         super(WindowDataGroup, self).__init__(name, parent, **kwargs)
         logger.debug('Initializing WindowDataGroup %s' % '/'.join(self.path))
-        DataTreeItem.__init__(self, name, parent)
         self.name = name
         self.parent = parent
 
@@ -123,10 +123,7 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         # Override DataGroup properties
         self.is_dataset = True
         self.children = None
-
         self.update_data()
-        self.update_tree_item()
-
 
     def update_data(self):
         logger.debug('Updating data at %s' % '/'.join(self.path))
