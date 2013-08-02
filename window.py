@@ -22,8 +22,6 @@ class DataTreeItem(object):
     data_tree_widget = None
     attrs_widget_layout = None
     def __init__(self, name, parent=None, attrs=None):
-        if hasattr(self, 'tree_item'):
-            return
         self.name = name
         self.parent = parent
         self.path = parent.path if parent is not None else ()
@@ -49,8 +47,15 @@ class DataTreeItem(object):
         self.tree_item.setText(1, str(shape))
         self.tree_item.setText(2, str(visible))
 
+    def update_attrs(self, attrs):
+        self.attrs.update(attrs)
+        self.attrs_widget.update(attrs)
+
 
 class DataTreeWidgetItem(Qt.QTreeWidgetItem):
+    """
+    Subclass QTreeWidgetItem to give it a global identifier
+    """
     def __init__(self, path, *args, **kwargs):
         Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
         self.path = path
@@ -74,9 +79,8 @@ class WindowDataGroup(DataTreeItem):
             self.proxy = proxy
 
         self.children = []
-        self.is_dataset = False
-
         self.attrs = self.proxy.get_attrs()
+
 
 class WindowPlot(DataTreeItem):
     """
@@ -96,7 +100,7 @@ class WindowPlot(DataTreeItem):
 
     def set_data(self, data):
         self.data = data
-        self.rank = get_rank(data, self.is_parametric())
+        self.rank = self.get_rank()
         if self.plot is None:
             self.plot = RankNItemWidget(self.rank, self.path)
         self.plot.update(self.data, self.attrs)
@@ -106,6 +110,14 @@ class WindowPlot(DataTreeItem):
 
     def is_parametric(self):
         return self.attrs.get('parametric', False)
+
+    def get_rank(self):
+        if self.data is None or len(self.data) == 0:
+            return None
+        elif self.is_parametric():
+            return len(self.data[0]) - 1
+        else:
+            return len(self.data.shape)
 
 
 class WindowDataSet(WindowDataGroup, WindowPlot):
@@ -119,9 +131,6 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     def __init__(self, name, parent, **kwargs):
         super(WindowDataSet, self).__init__(name, parent, **kwargs)
         logger.debug('Initializing WindowDataSet %s' % '/'.join(self.path))
-
-        # Override DataGroup properties
-        self.is_dataset = True
         self.children = None
         self.update_data()
 
@@ -131,18 +140,16 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         self.set_data(self.data)
         self.update_tree_item(shape=self.data.shape)
 
-
-
-def get_rank(data, parametric=False):
-    if data is None or len(data) == 0:
-        return None
-    elif parametric:
-        return len(data[0]) - 1
-    else:
-        return len(data.shape)
+    def update_attrs(self, attrs):
+        super(WindowDataSet, self).update_attrs(attrs)
+        if any(key in self.plot.plot_attrs for key in attrs.keys()):
+            self.plot.update(self.data, self.attrs)
 
 
 class WindowInterface:
+    """
+    Shareable wrapper for a PlotWindow.
+    """
     def __init__(self, window):
         self.win = window
 
@@ -201,7 +208,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
         self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_buttons)
         self.data_tree_widget.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
-        self.data_tree_widget.setColumnWidth(0, 200)
+        self.data_tree_widget.setColumnWidth(0, 90)
         self.data_tree_widget.setColumnWidth(1, 50)
         self.data_tree_widget.setColumnWidth(2, 50)
         self.data_tree_widget.setColumnWidth(3, 50)
@@ -269,6 +276,7 @@ class PlotWindow(Qt.QMainWindow):
             self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
             self.dataserver = objsh.helper.find_object('dataserver')
             self.dataserver.connect('data-changed', self.get_data_changed)
+            self.dataserver.connect('attrs-changed', self.get_attrs_changed)
         except ValueError:
             Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver").exec_()
             return
@@ -306,6 +314,11 @@ class PlotWindow(Qt.QMainWindow):
         child = WindowDataGroup(path[-1], parent)
         self.data_groups[path] = child
         parent.chidren.append(child)
+
+    def get_attrs_changed(self, filename, pathname, attrs):
+        logger.debug('Attrs received for %s %s' % (filename, pathname))
+        path = (filename,) + tuple(pathname.split('/')[1:])
+        self.data_groups[path].update_attrs(attrs)
 
     ####################
     # Attribute Editor #

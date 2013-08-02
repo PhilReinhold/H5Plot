@@ -65,6 +65,8 @@ class NodeEditWidget(Qt.QFrame):
         self.layout().addWidget(self.attr_list)
         self.layout().addWidget(add_attr_box)
 
+        self.attr_list_items = {}
+
     def update(self, attrs):
         for k, v in attrs.items():
             if k not in self.attr_list_items:
@@ -236,6 +238,9 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
 
 class Rank1ItemWidget(ItemWidget):
     rank = 1
+    plot_attrs = ["x0", "xscale",
+                  "xlabel", "ylabel",
+                  "parametric", "plot_args"]
     def __init__(self, ident, **kwargs):
         ItemWidget.__init__(self, ident, **kwargs)
 
@@ -324,6 +329,10 @@ class ParametricItemWidget(Rank1ItemWidget):
 
 class Rank2ItemWidget(Rank1ItemWidget):
     rank = 2
+    plot_attrs = ["x0", "xscale",
+                  "y0", "yscale",
+                  "xlabel", "ylabel", "zlabel",
+                  "parametric", "plot_args"]
     def __init__(self, ident, **kwargs):
         Rank1ItemWidget.__init__(self, ident, **kwargs)
 
