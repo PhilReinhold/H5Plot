@@ -15,10 +15,11 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-class DataTreeItem(object):
+class WindowItem(object):
     """
     An object with a presence in the data tree
     """
+    registry = {}
     data_tree_widget = None
     attrs_widget_layout = None
     def __init__(self, name, parent=None, attrs=None):
@@ -26,6 +27,7 @@ class DataTreeItem(object):
         self.parent = parent
         self.path = parent.path if parent is not None else ()
         self.path += (name,)
+        WindowItem.registry[self.path] = self
         self.tree_item = DataTreeWidgetItem(self.path, [name, "", ""])
 
         if attrs is None:
@@ -61,7 +63,7 @@ class DataTreeWidgetItem(Qt.QTreeWidgetItem):
         self.path = path
 
 
-class WindowDataGroup(DataTreeItem):
+class WindowDataGroup(WindowItem):
     """
     A Data Tree Item corresponding to a (remote) shared DataGroup
     """
@@ -70,6 +72,8 @@ class WindowDataGroup(DataTreeItem):
         logger.debug('Initializing WindowDataGroup %s' % '/'.join(self.path))
         self.name = name
         self.parent = parent
+        if parent is not None:
+            parent.children[name] = self
 
         if proxy is None:
             if parent is None:
@@ -79,18 +83,34 @@ class WindowDataGroup(DataTreeItem):
             self.proxy = proxy
         self.attrs_widget.set_proxy(self.proxy)
 
-        self.children = []
+        self.children = {}
         self.attrs = self.proxy.get_attrs()
 
+        self.proxy.connect('changed', self.child_changed)
+        self.proxy.connect('group-added', self.add_group)
+        #TODO connect removed
+        self.proxy.connect('attrs-changed', self.update_attrs)
 
-class WindowPlot(DataTreeItem):
+    def child_changed(self, key):
+        if key not in self.children:
+            self.add_dataset(key)
+        self.children[key].update_data()
+
+    def add_group(self, key):
+        WindowDataGroup(key, self)
+
+    def add_dataset(self, key):
+        WindowDataSet(key, self)
+
+
+class WindowPlot(WindowItem):
     """
     A plot living in the Dock Area
     """
     def __init__(self, name, parent, **kwargs):
         super(WindowPlot, self).__init__(name, parent, **kwargs)
         if not hasattr(self, 'tree_item'):
-            DataTreeItem.__init__(self, name, parent)
+            WindowItem.__init__(self, name, parent)
         self.data = None
         self.rank = None
         self.plot = None
@@ -168,7 +188,7 @@ class PlotWindow(Qt.QMainWindow):
     def __init__(self):
         Qt.QMainWindow.__init__(self)
         self.setup_ui()
-        self.data_groups = {}
+        #self.data_groups = {}
         self.setup_shared_objects()
 
     def setup_ui(self):
@@ -194,6 +214,7 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar.layout().addWidget(self.load_file_button)
         self.sidebar.layout().addWidget(self.save_view_button)
         self.sidebar.layout().addWidget(self.load_view_button)
+        self.auto_load_file = True
 
         # Spinner setting number of plots to display simultaneously by default
         self.max_plots_spinner = Qt.QSpinBox()
@@ -216,7 +237,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.setColumnWidth(1, 50)
         self.data_tree_widget.setColumnWidth(2, 50)
         self.data_tree_widget.setColumnWidth(3, 50)
-        DataTreeItem.data_tree_widget = self.data_tree_widget
+        WindowItem.data_tree_widget = self.data_tree_widget
         self.sidebar.layout().addWidget(self.data_tree_widget)
 
         # Plot-Oriented Buttons
@@ -233,7 +254,7 @@ class PlotWindow(Qt.QMainWindow):
         # Attribute Editor Area
         attrs_widget_box = Qt.QWidget()
         attrs_widget_box.setLayout(Qt.QVBoxLayout())
-        DataTreeItem.attrs_widget_layout = attrs_widget_box.layout()
+        WindowItem.attrs_widget_layout = attrs_widget_box.layout()
         self.current_edit_widget = None
         self.sidebar.layout().addWidget(attrs_widget_box)
 
@@ -250,15 +271,15 @@ class PlotWindow(Qt.QMainWindow):
         #file_menu.addAction('Clear').triggered.connect(lambda checked: self.background_client.clear_all_data())
 
         # Message Box
-        self.message_box = Qt.QTextEdit()
-        self.message_box.setReadOnly(True)
-        self.message_box.setVisible(False)
-        self.centralWidget().addWidget(self.message_box)
-        debug_menu = self.menuBar().addMenu('Debug')
-        action = debug_menu.addAction('View Debug Panel')
-        action.setCheckable(True)
-        action.setChecked(False)
-        action.triggered.connect(self.message_box.setVisible)
+        #self.message_box = Qt.QTextEdit()
+        #self.message_box.setReadOnly(True)
+        #self.message_box.setVisible(False)
+        #self.centralWidget().addWidget(self.message_box)
+        #debug_menu = self.menuBar().addMenu('Debug')
+        #action = debug_menu.addAction('View Debug Panel')
+        #action.setCheckable(True)
+        #action.setChecked(False)
+        #action.triggered.connect(self.message_box.setVisible)
 
     #######################
     # Data Server Actions #
@@ -279,51 +300,40 @@ class PlotWindow(Qt.QMainWindow):
             port = 55556
             self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
             self.dataserver = objsh.helper.find_object('dataserver')
-            self.dataserver.connect('data-changed', self.get_data_changed)
-            self.dataserver.connect('attrs-changed', self.get_attrs_changed)
+            self.dataserver.connect('file-added', self.add_file)
+            #self.dataserver.connect('data-changed', self.get_data_changed)
+            #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
         except ValueError:
             Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver").exec_()
             return
 
-    def get_data_changed(self, filename, pathname):
-        path = (filename,) + tuple(pathname.split('/')[1:])
-        logger.debug('Data Changed at %s' % '/'.join(path))
-        path = tuple(path)
-        if path not in self.data_groups: # Then create it
-            logger.debug('Path not found: %s' % '/'.join(path))
-            logger.debug(repr(self.data_groups))
-            if path[:-1] not in self.data_groups:
-                self.create_group(path[:-1]) # Create parent if necessary
-            parent = self.data_groups[path[:-1]]
-            child = WindowDataSet(path[-1], parent)
-            self.data_groups[path] = child
-            parent.children.append(child)
+    def add_file(self, filename):
+        proxy = self.dataserver.get_file(filename)
+        WindowDataGroup(filename, None, proxy)
 
-        else:
-            print 'Path found', path, 'updating...'
-            self.data_groups[path].update_data()
-
-    def create_group(self, path):
-        logger.debug('Create Group! %s' % '/'.join(path))
-        if len(path) == 1:
-            filename = path[0]
-            proxy = self.dataserver.get_file(filename)
-            self.data_groups[path] = WindowDataGroup(filename, None, proxy)
-            return
-
-        if path[:-1] not in self.data_groups:
-            self.create_group(path[:-1])
-
-        parent = self.data_groups[path[:-1]]
-        child = WindowDataGroup(path[-1], parent)
-        self.data_groups[path] = child
-        parent.chidren.append(child)
-
-    def get_attrs_changed(self, filename, pathname, attrs):
-        logger.debug('Attrs received for %s %s' % (filename, pathname))
-        path = (filename,) + tuple(pathname.split('/')[1:])
-        self.data_groups[path].update_attrs(attrs)
-
+#    def get_data_changed(self, filename, pathname):
+#        path = (filename,) + tuple(pathname.split('/')[1:])
+#        logger.debug('Data Changed at %s' % '/'.join(path))
+#        path = tuple(path)
+#        if path not in self.data_groups: # Then create it
+#            logger.debug('Path not found: %s' % '/'.join(path))
+#            logger.debug(repr(self.data_groups))
+#            if path[:-1] not in self.data_groups:
+#                self.add_group(path[:-1]) # Create parent if necessary
+#            parent = self.data_groups[path[:-1]]
+#            child = WindowDataSet(path[-1], parent)
+#            self.data_groups[path] = child
+#
+#        else:
+#            print 'Path found', path, 'updating...'
+#            self.data_groups[path].update_data()
+#
+#
+#    def get_attrs_changed(self, filename, pathname, attrs):
+#        logger.debug('Attrs received for %s %s' % (filename, pathname))
+#        path = (filename,) + tuple(pathname.split('/')[1:])
+#        self.data_groups[path].update_attrs(attrs)
+#
     ####################
     # Attribute Editor #
     ####################
@@ -333,7 +343,7 @@ class PlotWindow(Qt.QMainWindow):
         if self.current_edit_widget is not None:
             self.current_edit_widget.hide()
 
-        widget = self.data_groups[item.path].attrs_widget
+        widget = WindowItem.registry[item.path].attrs_widget
         self.current_edit_widget = widget
         widget.show()
 
@@ -341,15 +351,14 @@ class PlotWindow(Qt.QMainWindow):
     # File Buttons #
     ################
 
-    def load(self):
+    def load_file(self):
         filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
                                                         config.h5file_directory, config.h5file_filter))
         if not filename:
             return
-        proxy = self.dataserver.get_file(filename)
-        self.data_groups[(filename,)] = WindowDataGroup(filename, None, proxy=proxy)
+        self.dataserver.get_file(filename)
 
-    def save_view(self):
+    def save_view(self): # TODO
         filename = str(Qt.QFileDialog().getSaveFileName(self, 'Save View file'))
         open_plots = []
         for group in self.data_groups.values():
@@ -495,42 +504,9 @@ class PlotWindow(Qt.QMainWindow):
             self.data_tree_widget.setItemSelected(self.tree_widgets[p], True)
         self.save_selection()
 
+    #def msg(self, *args):
+    #    self.message_box.append(', '.join(map(str, args)))
 
-    def msg(self, *args):
-        self.message_box.append(', '.join(map(str, args)))
-
-    def wait_for_cleanup_dialog(self):
-        """
-        :return: None
-        Activated when the window is closed, this displays a dialog until the background
-        """
-        dialog = Qt.QDialog()
-        dialog.setLayout(Qt.QVBoxLayout())
-        dialog.layout().addWidget(Qt.QLabel("Please wait while the server cleans up..."))
-        self.connect(self.background_obj, Qt.SIGNAL('server done'), dialog.accept)
-        self.connect(self.background_obj, Qt.SIGNAL('server done'), self.background_thread.exit)
-        dialog.exec_()
-
-widget_tools = {
-    Qt.QSpinBox : {
-        "read" : "value",
-        "change_signal" : "valueChanged"},
-    Qt.QDoubleSpinBox : {
-        "read" : "value",
-        "change_signal" : "valueChanged"},
-    Qt.QLineEdit : {
-        "read" : "text",
-        "change_signal" : "textEdited"},
-    Qt.QButtonGroup : {
-        "read" : "checkedId",
-        "change_signal" : "buttonClicked"},
-    Qt.QCheckBox : {
-        "read" : "isChecked",
-        "change_signal" : "stateChanged"},
-    Qt.QSlider : {
-        "read" : "value",
-        "change_signal" : "valueChanged"},
-    }
 
 def run_plotwindow():
     #sys.excepthook = excepthook
