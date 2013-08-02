@@ -45,9 +45,11 @@ class WindowItem(object):
             parent.tree_item.addChild(self.tree_item)
             parent.tree_item.setExpanded(True)
 
-    def update_tree_item(self, shape="", visible=""):
-        self.tree_item.setText(1, str(shape))
-        self.tree_item.setText(2, str(visible))
+    def update_tree_item(self, shape=None, visible=None):
+        if shape is not None:
+            self.tree_item.setText(1, str(shape))
+        if visible is not None:
+            self.tree_item.setText(2, str(visible))
 
     def update_attrs(self, attrs):
         self.attrs.update(attrs)
@@ -61,6 +63,9 @@ class DataTreeWidgetItem(Qt.QTreeWidgetItem):
     def __init__(self, path, *args, **kwargs):
         Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
         self.path = path
+
+    def is_leaf(self):
+        return self.childCount() == 0
 
 
 class WindowDataGroup(WindowItem):
@@ -457,8 +462,9 @@ class PlotWindow(Qt.QMainWindow):
 
     def toggle_item(self, item, col):
         if item.is_leaf():# and item.plot:
-            widget = self.plot_widgets[item.path]
-            widget.toggle_hide()
+            item = WindowItem.registry[item.path]
+            item.plot.toggle_hide()
+            item.update_tree_item(visible=False)
             #self.background_client.set_params(item.path, widget.rank, plot=widget.visible)
             print 'toggled', item.path
         else:

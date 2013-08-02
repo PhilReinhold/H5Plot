@@ -19,6 +19,12 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
         self.insert_location = 'bottom'
         self.last_dock = None
 
+    def remove_dock(self, dock):
+        dock.setParent(None)
+        dock.label.setParent(None)
+        self.insert_location = 'bottom'
+
+
     def add_dock_auto_location(self, dock):
         if self.insert_location == 'right':
             self.addDock(dock, self.insert_location, self.last_dock)
@@ -115,7 +121,7 @@ class NodeEditWidget(Qt.QFrame):
                     pass
 
         if self.proxy is not None:
-            self.proxy.set_attrs(**{name:value})
+            self.proxy.set_attrs(**{name: value})
         else:
             if self.new_attr:
                 self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, str(value), str(type(value))]))
@@ -221,12 +227,9 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
 
     def toggle_hide(self):
         if self.is_visible():
-            self.setParent(None)
-            self.label.setParent(None)
-            self.visible = False
+            self.dock_area.remove_dock(self)
         else:
             self.dock_area.add_dock_auto_location(self)
-            self.visible = True
 
     def update_params(self, **kwargs):
         self.__dict__.update(kwargs)
