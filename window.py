@@ -52,13 +52,13 @@ class WindowItem(object):
             self.tree_item.setText(2, str(visible))
 
     def update_attrs(self, attrs):
-        self.attrs.update(attrs)
-        self.attrs_widget.update(attrs)
+        self.attrs.update_attrs(attrs)
+        self.attrs_widget.update_attrs(attrs)
 
 
 class DataTreeWidgetItem(Qt.QTreeWidgetItem):
     """
-    Subclass QTreeWidgetItem to give it a global identifier
+    Subclass QTreeWidgetItem to give it a globally recognized identifier
     """
     def __init__(self, path, *args, **kwargs):
         Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
@@ -66,6 +66,10 @@ class DataTreeWidgetItem(Qt.QTreeWidgetItem):
 
     def is_leaf(self):
         return self.childCount() == 0
+
+    def get_children(self):
+        for i in range(self.childCount()):
+            yield self.child(i)
 
 
 class WindowDataGroup(WindowItem):
@@ -133,7 +137,7 @@ class WindowPlot(WindowItem):
         self.rank = self.get_rank()
         if self.plot is None:
             self.plot = RankNItemWidget(self.rank, self.path)
-        self.plot.update(self.data, self.attrs)
+        self.plot.update_plot(self.data, self.attrs)
 
     def set_attrs(self, attrs):
         self.attrs = attrs
@@ -167,12 +171,12 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         logger.debug('Updating data at %s' % '/'.join(self.path))
         self.data = self.proxy[:]
         self.set_data(self.data)
-        self.update_tree_item(shape=self.data.shape)
+        self.update_tree_item(shape=self.data.shape, visible=self.plot.is_visible())
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
         if any(key in self.plot.plot_attrs for key in attrs.keys()):
-            self.plot.update(self.data, self.attrs)
+            self.plot.update_plot(self.data, self.attrs)
 
 
 class WindowInterface:
@@ -208,7 +212,7 @@ class PlotWindow(Qt.QMainWindow):
         ItemWidget.dock_area = self.dock_area
         self.centralWidget().addWidget(self.sidebar)
         self.centralWidget().addWidget(self.dock_area)
-        self.centralWidget().setSizes([300, 1000])
+        self.centralWidget().setSizes([250, 1000])
 
         # Server-Oriented Buttons
         self.connect_dataserver_button = Qt.QPushButton('Connect to Data Server')
@@ -235,8 +239,8 @@ class PlotWindow(Qt.QMainWindow):
 
         # Structure Tree
         self.data_tree_widget = Qt.QTreeWidget()
-        self.data_tree_widget.setColumnCount(4)
-        self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Save?', 'Plot?'])
+        self.data_tree_widget.setColumnCount(3)
+        self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Visible?'])
         self.data_tree_widget.itemClicked.connect(self.change_edit_widget)
         self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
         self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_buttons)
@@ -464,11 +468,9 @@ class PlotWindow(Qt.QMainWindow):
         if item.is_leaf():# and item.plot:
             item = WindowItem.registry[item.path]
             item.plot.toggle_hide()
-            item.update_tree_item(visible=False)
-            #self.background_client.set_params(item.path, widget.rank, plot=widget.visible)
-            print 'toggled', item.path
+            item.update_tree_item(visible=item.plot.is_visible())
         else:
-            for child in item.getChildren():
+            for child in item.get_children():
                 self.toggle_item(child, col)
 
     def add_plot_widget(self, path, rank=1, **kwargs):

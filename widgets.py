@@ -77,7 +77,7 @@ class NodeEditWidget(Qt.QFrame):
     def set_proxy(self, proxy):
         self.proxy = proxy
 
-    def update(self, attrs):
+    def update_attrs(self, attrs):
         for k, v in attrs.items():
             if k not in self.attr_list_items:
                 item = Qt.QTreeWidgetItem([k, str(v), str(type(v))])
@@ -238,7 +238,7 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
     def add_plot_widget(self, **kwargs):
         raise NotImplementedError
 
-    def update(self, data, attrs=None):
+    def update_plot(self, data, attrs=None):
         raise NotImplementedError
 
     def clear_plot(self):
@@ -259,7 +259,7 @@ class Rank1ItemWidget(ItemWidget):
         self.addWidget(self.line_plt)
         self.curve = None
 
-    def update(self, data, attrs=None):
+    def update_plot(self, data, attrs=None):
         if attrs is None:
             attrs = {}
 
@@ -372,7 +372,7 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.addWidget(self.line_plt)
         self.curve = None
 
-    def update(self, data, attrs=None):
+    def update_plot(self, data, attrs=None):
         if attrs is None:
             attrs = {}
 
@@ -397,7 +397,7 @@ class Rank2ItemWidget(Rank1ItemWidget):
 
         if self.update_toggle.isChecked():
             self.img_view.setLabels(xlabel, ylabel, zlabel)
-            Rank1ItemWidget.update(self, data[-1,:], attrs)
+            Rank1ItemWidget.update_plot(self, data[-1,:], attrs)
 
             # self.img_view.imageItem.show()
             # Well, this is a hack. I'm not sure why autorange is disabled after setImage
