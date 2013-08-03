@@ -63,6 +63,7 @@ class DataTreeWidgetItem(Qt.QTreeWidgetItem):
     def __init__(self, path, *args, **kwargs):
         Qt.QTreeWidgetItem.__init__(self, *args, **kwargs)
         self.path = path
+        self.strpath = '/'.join(self.path)
 
     def is_leaf(self):
         return self.childCount() == 0
@@ -94,7 +95,7 @@ class WindowDataGroup(WindowItem):
 
         self.attrs = self.proxy.get_attrs()
 
-        if not isinstance(self, WindowDataSet):
+        if not self.is_dataset():
             self.children = {}
             for name in self.proxy.keys():
                 self.update_child(name)
@@ -103,6 +104,9 @@ class WindowDataGroup(WindowItem):
             self.proxy.connect('group-added', self.add_group)
             #TODO connect removed
             self.proxy.connect('attrs-changed', self.update_attrs)
+
+    def is_dataset(self):
+        return isinstance(self, WindowDataSet)
 
     def update_child(self, key):
         if key not in self.children:
@@ -424,10 +428,11 @@ class PlotWindow(Qt.QMainWindow):
         selection = self.data_tree_widget.selectedItems()
         multiplot = len(selection) > 1
         multiplot = multiplot and all(i.is_leaf() for i in selection)
-        multiplot = multiplot and all(self.plot_widgets[i.path].rank == 1 for i in selection)
-        parametric = len(selection) == 2
-        parametric = parametric and all(i.is_leaf() for i in selection)
-        parametric = parametric and all(self.plot_widgets[i.path].rank == 1 for i in selection)
+        multiplot = multiplot and all(WindowItem.registry[i.path].rank == 1 for i in selection)
+        parametric = multiplot and len(selection) == 2
+        if parametric:
+            item1, item2 = [WindowItem.registry[i.path] for i in selection]
+            parametric = parametric and item1.data.shape[0] == item2.data.shape[0]
         self.multiplot_button.setEnabled(multiplot)
         self.parametric_button.setEnabled(parametric)
 
