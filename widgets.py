@@ -10,9 +10,6 @@ import numpy as np
 
 import helpers
 
-#Qt.QTreeWidgetItem.is_leaf = lambda item: str(item.text(1)) != ""
-#Qt.QTreeWidgetItem.getChildren = lambda item: [item.child(i) for i in range(item.childCount())]
-
 class MyDockArea(pyqtgraph.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
         pyqtgraph.dockarea.DockArea.__init__(self, *args, **kwargs)
@@ -152,48 +149,6 @@ class LeafEditWidget(NodeEditWidget):
         name, value = NodeEditWidget.add_attribute(self)
         if name in self.param_attrs:
             self.background_client.set_params(self.path, self.rank, **{name:value})
-    # def __init__(self, leaf):
-    #     self.rank = leaf.rank
-    #     self.range_area = Qt.QWidget()
-    #     self.range_area.setLayout(Qt.QHBoxLayout())
-    #     self.layout().addWidget(self.range_area)
-    #     self.add_spin('x0', leaf)
-    #     self.add_spin('xscale', leaf)
-    #     if leaf.rank > 1:
-    #         self.add_spin('y0', leaf)
-    #         self.add_spin('yscale', leaf)
-    #     self.label_area = Qt.QWidget()
-    #     self.label_area.setLayout(Qt.QHBoxLayout())
-    #     self.layout().addWidget(self.label_area)
-    #     self.add_edit('xlabel', leaf)
-    #     self.add_edit('ylabel', leaf)
-    #     if leaf.rank > 1:
-    #         self.add_edit('zlabel', leaf)
-    #     self.commit_button = Qt.QPushButton('Commit')
-    #     self.commit_button.clicked.connect(self.commit_params)
-    #     self.layout().addWidget(self.commit_button)
-    #     self.add_attr_widget(leaf)
-
-    # def add_spin(self, name, leaf):
-    #     self.range_area.layout().addWidget(Qt.QLabel(name))
-    #     widget = pyqtgraph.SpinBox(value=getattr(leaf, name))
-    #     self.spin_widgets[name] = widget
-    #     self.range_area.layout().addWidget(widget)
-
-    # def add_edit(self, name, leaf):
-    #     self.label_area.layout().addWidget(Qt.QLabel(name))
-    #     widget = Qt.QLineEdit(getattr(leaf, name))
-    #     self.text_widgets[name] = widget
-    #     self.label_area.layout().addWidget(widget)
-
-    # def commit_params(self):
-    #     params = self.to_dict()
-    #     self.background_client.set_params(self.path, self.rank, **params)
-
-    # def to_dict(self):
-    #     params = {name: spin.value() for name, spin in self.spin_widgets.items()}
-    #     params.update({name: edit.text() for name, edit in self.text_widgets.items()})
-    #     return params
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
     dock_area = None
@@ -254,8 +209,8 @@ class Rank1ItemWidget(ItemWidget):
         ItemWidget.__init__(self, ident, **kwargs)
 
     def add_plot_widget(self, **kwargs):
-        #self.line_plt = pyqtgraph.PlotWidget(title=self.ident, **kwargs)
         self.line_plt = pyqtgraph.PlotWidget(**kwargs)
+        self.line_plt.plotItem.showGrid(x=True, y=True)
         self.addWidget(self.line_plt)
         self.curve = None
 

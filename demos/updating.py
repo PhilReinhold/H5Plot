@@ -1,8 +1,8 @@
 import numpy as np
-import dataserver_helpers
+from dataserver import get_file
 import time
 
-f = dataserver_helpers.dataserver_client().get_file('updating_test.h5')
+f = get_file('updating_test.h5')
 for _ in range(10):
     time.sleep(.1)
     #f['accumulating line'].append_data(np.random.normal())
