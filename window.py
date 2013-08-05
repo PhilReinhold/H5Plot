@@ -205,7 +205,7 @@ class PlotWindow(Qt.QMainWindow):
         Qt.QMainWindow.__init__(self)
         self.setup_ui()
         #self.data_groups = {}
-        self.setup_shared_objects()
+        self.setup_server()
 
     def setup_ui(self):
         # Sidebar / Dockarea
@@ -227,6 +227,7 @@ class PlotWindow(Qt.QMainWindow):
         self.load_file_button = Qt.QPushButton('Load File')
         self.save_view_button = Qt.QPushButton('Save View')
         self.load_view_button = Qt.QPushButton('Load View')
+        self.load_file_button.clicked.connect(self.load_file)
         self.sidebar.layout().addWidget(self.load_file_button)
         self.sidebar.layout().addWidget(self.save_view_button)
         self.sidebar.layout().addWidget(self.load_view_button)
@@ -275,9 +276,14 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar.layout().addWidget(attrs_widget_box)
 
         # Status Bar
-        self.view_status = Qt.QLabel('Empty')
+        self.connected_status = Qt.QLabel('Not Connected')
+        #self.view_status = Qt.QLabel('Empty')
         self.current_files = None
-        self.statusBar().addWidget(self.view_status)
+        self.statusBar().addWidget(self.connected_status)
+        #self.statusBar().addWidget(self.view_status)
+
+        self.connection_checker = Qt.QTimer()
+        self.connection_checker.timeout.connect(self.check_connection_status)
 
         # Menu bar
         #file_menu = self.menuBar().addMenu('File')
@@ -301,7 +307,7 @@ class PlotWindow(Qt.QMainWindow):
     # Data Server Actions #
     #######################
 
-    def setup_shared_objects(self):
+    def setup_server(self):
         self.zbe = objsh.ZMQBackend()
         self.zbe.start_server('127.0.0.1', 55563)
         self.connect_dataserver()
@@ -315,15 +321,29 @@ class PlotWindow(Qt.QMainWindow):
             addr = '127.0.0.1'
             port = 55556
             self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
-            self.dataserver = objsh.helper.find_object('dataserver')
+            self.dataserver = objsh.helper.find_object('dataserver', no_cache=True)
             self.dataserver.connect('file-added', self.add_file)
             for filename, proxy in self.dataserver.list_files(names_only=False).items():
                 self.add_file(filename, proxy)
+            self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
+            self.connect_dataserver_button.setEnabled(False)
+            self.connection_checker.start(500)
             #self.dataserver.connect('data-changed', self.get_data_changed)
             #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
         except ValueError, e:
-            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed", "Could not connect to dataserver\n" + str(e)).exec_()
-            return
+            import traceback
+            error = str(e)
+            tb = traceback.format_exc()
+            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed",
+                           "Could not connect to dataserver\n%s\n%s" % (error, tb)).exec_()
+
+    def check_connection_status(self):
+        try:
+            self.dataserver.hello(timeout=50)
+        except ValueError:
+            self.connected_status.setText('Not Connected')
+            self.connect_dataserver_button.setEnabled(True)
+            self.connection_checker.stop()
 
     def add_file(self, filename, proxy=None):
         if proxy is None:
