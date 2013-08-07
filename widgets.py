@@ -297,33 +297,30 @@ class MultiplotItemWidget(Rank1ItemWidget):
 class ParametricItemWidget(Rank1ItemWidget):
     def __init__(self, path1, path2, **kwargs):
         Rank1ItemWidget.__init__(self, path1[-1]+' vs '+path2[-1], **kwargs)
+        self.path1 = path1
+        self.path2 = path2
+        self.datas = { path1: [], path2: []}
         self.transpose_toggle = Qt.QCheckBox('Transpose')
-        self.transpose_toggle.stateChanged.connect(lambda s: self.update_plot())
+        self.transpose_toggle.stateChanged.connect(lambda s: self.refresh_plot())
         self.buttons_widget.layout().addWidget(self.transpose_toggle)
-        self.combined_leaf = DataTreeLeaf(np.array([[]]), 1, parametric=True)
-        self.leaf1_data, self.leaf2_data = [], []
-        self.path1, self.path2 = path1, path2
 
-    def update_plot(self, path=None, leaf=None):
-        if path is None:
-            self.combined_leaf.data = np.array(zip(self.leaf1_data, self.leaf2_data))
-        elif path == self.path1:
-            self.leaf1_data = leaf.data
-            self.combined_leaf.data = np.array(zip(leaf.data, self.leaf2_data))
-            self.combined_leaf.xlabel = leaf.path[-1]
-        elif path == self.path2:
-            self.leaf2_data = leaf.data
-            self.combined_leaf.data = np.array(zip(self.leaf1_data, leaf.data))
-            self.combined_leaf.ylabel = leaf.path[-1]
-        else:
-            raise ValueError(str(path) + ' is not either ' + str(self.path1) + ' or ' + str(self.path2))
+    def update_path(self, path, data, attrs=None):
+        self.datas[path] = data
+        self.refresh_plot(attrs)
+
+    def refresh_plot(self, attrs=None):
+        data = np.array(zip(self.datas[self.path1],  self.datas[self.path2]))
+        if attrs is None:
+            attrs = {}
+        attrs = attrs.copy()
+        attrs['parametric'] = True
+        attrs['xlabel'] = '/'.join(self.path1)
+        attrs['ylabel'] = '/'.join(self.path2)
         if self.transpose_toggle.isChecked():
-            leaf = copy(self.combined_leaf)
-            leaf.data = np.array((leaf.data[:,1], leaf.data[:,0]))
-            leaf.xlabel, leaf.ylabel = leaf.ylabel, leaf.xlabel
-        else:
-            leaf = self.combined_leaf
-        Rank1ItemWidget.update_plot(self, leaf, refresh_labels=True)
+            data = np.transpose(data)
+            attrs['xlabel'], attrs['ylabel'] = attrs['ylabel'], attrs['xlabel']
+        self.update_plot(data, attrs)
+
 
 class Rank2ItemWidget(Rank1ItemWidget):
     rank = 2

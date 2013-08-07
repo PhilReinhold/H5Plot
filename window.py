@@ -176,8 +176,9 @@ class WindowPlot(WindowItem):
         del self.plot
 
 class WindowMultiPlot(WindowItem):
-    def __init__(self, sources):
-        name = "::".join(i.name for i in sources)
+    def __init__(self, sources, parametric=False):
+        connector = " vs " if parametric else " :: "
+        name = connector.join(i.name for i in sources)
 
         if ("multiplots",) not in WindowItem.registry:
             WindowItem("multiplots", None)
@@ -185,8 +186,11 @@ class WindowMultiPlot(WindowItem):
         multiplots_group = WindowItem.registry[("multiplots",)]
         WindowItem.__init__(self, name, multiplots_group)
 
-        self.plot = MultiplotItemWidget(name)
-        self.plot.line_plt.addLegend()
+        if parametric:
+            self.plot = ParametricItemWidget(sources[0].path, sources[1].path)
+        else:
+            self.plot = MultiplotItemWidget(name)
+            self.plot.line_plt.addLegend()
 
         for source in sources:
             self.update_source(source.path)
@@ -306,6 +310,9 @@ class PlotWindow(Qt.QMainWindow):
         self.multiplot_action = Qt.QAction('Create Multiplot', self)
         self.multiplot_action.triggered.connect(self.add_multiplot)
         self.data_tree_widget.addAction(self.multiplot_action)
+        self.parametric_action = Qt.QAction('Plot Pair Parametrically', self)
+        self.parametric_action.triggered.connect(lambda: self.add_multiplot(True))
+        self.data_tree_widget.addAction(self.parametric_action)
         self.data_tree_widget.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
 
         # Plot-Oriented Buttons
@@ -462,9 +469,8 @@ class PlotWindow(Qt.QMainWindow):
 
     def add_multiplot(self, parametric=False):
         selection = self.data_tree_widget.selectedItems()
-        paths = tuple(i.strpath for i in selection)
         sources = [WindowItem.registry[i.path] for i in selection]
-        WindowMultiPlot(sources)
+        WindowMultiPlot(sources, parametric)
 
         #if parametric:
         #    widget = ParametricItemWidget(selection[0].path, selection[1].path, self.dock_area)
@@ -496,11 +502,11 @@ class PlotWindow(Qt.QMainWindow):
         multiplot = multiplot and all(i.is_leaf() for i in selection)
         multiplot = multiplot and all(WindowItem.registry[i.path].rank == 1 for i in selection)
         parametric = multiplot and len(selection) == 2
-        if parametric:
-            item1, item2 = [WindowItem.registry[i.path] for i in selection]
-            parametric = parametric and item1.data.shape[0] == item2.data.shape[0]
+        #if parametric:
+        #    item1, item2 = [WindowItem.registry[i.path] for i in selection]
+        #    parametric = parametric and item1.data.shape[0] == item2.data.shape[0]
         self.multiplot_action.setEnabled(multiplot)
-        #self.parametric_button.setEnabled(parametric)
+        self.parametric_action.setEnabled(parametric)
 
     #def remove_selection(self):
     #    for item in self.structure_tree.selectedItems():
