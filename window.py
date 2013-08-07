@@ -26,6 +26,8 @@ class WindowItem(object):
     def __init__(self, name, parent=None, attrs=None):
         self.name = name
         self.parent = parent
+        if parent is not None:
+            parent.children[name] = self
         self.path = parent.path if parent is not None else ()
         self.path += (name,)
         WindowItem.registry[self.path] = self
@@ -56,6 +58,10 @@ class WindowItem(object):
         self.attrs.update_attrs(attrs)
         self.attrs_widget.update_attrs(attrs)
 
+    def remove(self):
+        del self.tree_item
+        del self.attrs_widget
+
 
 class DataTreeWidgetItem(Qt.QTreeWidgetItem):
     """
@@ -81,10 +87,6 @@ class WindowDataGroup(WindowItem):
     def __init__(self, name, parent, proxy=None, **kwargs):
         super(WindowDataGroup, self).__init__(name, parent, **kwargs)
         logger.debug('Initializing WindowDataGroup %s' % '/'.join(self.path))
-        self.name = name
-        self.parent = parent
-        if parent is not None:
-            parent.children[name] = self
 
         if proxy is None:
             if parent is None:
@@ -120,7 +122,6 @@ class WindowDataGroup(WindowItem):
     def add_dataset(self, key):
         WindowDataSet(key, self)
 
-
 class WindowPlot(WindowItem):
     """
     A plot living in the Dock Area
@@ -137,8 +138,10 @@ class WindowPlot(WindowItem):
         self.multiplots = []
         self.parametric_plots = []
 
+        objsh.register(self, '/'.join(self.path))
+
     def set_data(self, data):
-        self.data = data
+        self.data = np.array(data)
         self.rank = self.get_rank()
         if self.plot is None:
             self.plot = RankNItemWidget(self.rank, self.path)
@@ -157,6 +160,12 @@ class WindowPlot(WindowItem):
             return len(self.data[0]) - 1
         else:
             return len(self.data.shape)
+
+    def remove(self):
+        super(WindowPlot, self).remove()
+        if self.plot.is_visible():
+            self.plot.toggle_hide()
+        del self.plot
 
 
 class WindowDataSet(WindowDataGroup, WindowPlot):
@@ -190,9 +199,13 @@ class WindowInterface:
     """
     def __init__(self, window):
         self.win = window
+        objsh.register(self, 'plotwin')
 
-    def plot(self, name, data):
-        pass
+    def get_all_plots(self):
+        return { k: v for k, v in WindowItem.registry.items() if isinstance(v, WindowPlot) }
+
+    def add_plot(self, name):
+        return WindowPlot(name, None)
 
     def quit(self):
         sys.exit()
@@ -316,8 +329,7 @@ class PlotWindow(Qt.QMainWindow):
         except objsh.TimeoutError:
             logger.warning('Could not connect to dataserver on startup')
         #zbe.connect_to('tcp://127.0.0.1:55556')
-        public_interface = WindowInterface(self)
-        objsh.register(public_interface, 'plotwin')
+        self.public_interface = WindowInterface(self)
         self.zbe.add_qt_timer()
 
     def connect_dataserver(self):#, addr='127.0.0.1', port=55556):
@@ -356,6 +368,8 @@ class PlotWindow(Qt.QMainWindow):
     def add_file(self, filename, proxy=None):
         if proxy is None:
             proxy = self.dataserver.get_file(filename)
+        if (filename,) in WindowItem.registry:
+            WindowItem.registry[(filename,)].remove()
         WindowDataGroup(filename, None, proxy)
 
 #    def get_data_changed(self, filename, pathname):
