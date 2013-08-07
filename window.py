@@ -26,10 +26,12 @@ class WindowItem(object):
     def __init__(self, name, parent=None, attrs=None):
         self.name = name
         self.parent = parent
+        self.children = {}
         if parent is not None:
             parent.children[name] = self
         self.path = parent.path if parent is not None else ()
         self.path += (name,)
+        self.strpath = '/'.join(self.path)
         WindowItem.registry[self.path] = self
         self.tree_item = DataTreeWidgetItem(self.path, [name, "", ""])
 
@@ -86,7 +88,7 @@ class WindowDataGroup(WindowItem):
     """
     def __init__(self, name, parent, proxy=None, **kwargs):
         super(WindowDataGroup, self).__init__(name, parent, **kwargs)
-        logger.debug('Initializing WindowDataGroup %s' % '/'.join(self.path))
+        logger.debug('Initializing WindowDataGroup %s' % self.strpath)
 
         if proxy is None:
             if parent is None:
@@ -135,10 +137,7 @@ class WindowPlot(WindowItem):
         self.plot = None
         self.attrs = {}
 
-        self.multiplots = []
-        self.parametric_plots = []
-
-        objsh.register(self, '/'.join(self.path))
+        objsh.register(self, self.strpath)
 
     def set_data(self, data):
         self.data = np.array(data)
@@ -146,6 +145,8 @@ class WindowPlot(WindowItem):
         if self.plot is None:
             self.plot = RankNItemWidget(self.rank, self.path)
         self.plot.update_plot(self.data, self.attrs)
+        self.emit('data-changed')
+        self.update_tree_item(shape=self.data.shape, visible=self.plot.is_visible())
 
     def set_attrs(self, attrs):
         self.attrs = attrs
@@ -167,6 +168,26 @@ class WindowPlot(WindowItem):
             self.plot.toggle_hide()
         del self.plot
 
+class WindowMultiPlot(WindowItem):
+    def __init__(self, sources):
+        name = "::".join(i.name for i in sources)
+
+        if ("multiplots",) not in WindowItem.registry:
+            WindowItem("multiplots", None)
+
+        multiplots_group = WindowItem.registry[("multiplots",)]
+        WindowItem.__init__(self, name, multiplots_group)
+
+        self.plot = MultiplotItemWidget(name)
+
+        for source in sources:
+            self.update_source(source.path)
+            source.connect('data-changed', lambda: self.update_source(source.path))
+
+    def update_source(self, path):
+        item = WindowItem.registry[path]
+        self.plot.update_path(path, item.data, item.attrs)
+
 
 class WindowDataSet(WindowDataGroup, WindowPlot):
     """
@@ -178,14 +199,13 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     """
     def __init__(self, name, parent, **kwargs):
         super(WindowDataSet, self).__init__(name, parent, **kwargs)
-        logger.debug('Initializing WindowDataSet %s' % '/'.join(self.path))
+        logger.debug('Initializing WindowDataSet %s' % self.strpath)
         self.update_data()
 
     def update_data(self):
-        logger.debug('Updating data at %s' % '/'.join(self.path))
+        logger.debug('Updating data at %s' % self.strpath)
         self.data = self.proxy[:]
         self.set_data(self.data)
-        self.update_tree_item(shape=self.data.shape, visible=self.plot.is_visible())
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
@@ -262,7 +282,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Visible?'])
         self.data_tree_widget.itemClicked.connect(self.change_edit_widget)
         self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
-        self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_buttons)
+        self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_actions)
         self.data_tree_widget.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
         self.data_tree_widget.setColumnWidth(0, 90)
         self.data_tree_widget.setColumnWidth(1, 50)
@@ -271,16 +291,21 @@ class PlotWindow(Qt.QMainWindow):
         WindowItem.data_tree_widget = self.data_tree_widget
         self.sidebar.layout().addWidget(self.data_tree_widget)
 
+        # Structure Tree Context Menu
+        self.multiplot_action = Qt.QAction('Create Multiplot', self)
+        self.multiplot_action.triggered.connect(self.add_multiplot)
+        self.data_tree_widget.addAction(self.multiplot_action)
+        self.data_tree_widget.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
+
         # Plot-Oriented Buttons
-        self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
-        self.multiplot_button.clicked.connect(self.add_multiplot)
-        self.multiplot_button.setEnabled(False)
-        self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
-        self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
-        self.parametric_button.setEnabled(False)
-        self.sidebar.layout().addWidget(self.multiplot_button)
-        self.sidebar.layout().addWidget(self.parametric_button)
-        self.current_edit_widget = None
+        #self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
+        #self.multiplot_button.clicked.connect(self.add_multiplot)
+        #self.multiplot_button.setEnabled(False)
+        #self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
+        #self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
+        #self.parametric_button.setEnabled(False)
+        #self.sidebar.layout().addWidget(self.multiplot_button)
+        #self.sidebar.layout().addWidget(self.parametric_button)
 
         # Attribute Editor Area
         attrs_widget_box = Qt.QWidget()
@@ -328,7 +353,6 @@ class PlotWindow(Qt.QMainWindow):
             self.connect_dataserver()
         except objsh.TimeoutError:
             logger.warning('Could not connect to dataserver on startup')
-        #zbe.connect_to('tcp://127.0.0.1:55556')
         self.public_interface = WindowInterface(self)
         self.zbe.add_qt_timer()
 
@@ -343,19 +367,6 @@ class PlotWindow(Qt.QMainWindow):
         self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
         self.connect_dataserver_button.setEnabled(False)
         self.connection_checker.start(500)
-        #self.dataserver.connect('data-changed', self.get_data_changed)
-        #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
-        #except Exception, e:
-        #    import traceback
-        #    error = str(e)
-        #    tb = traceback.format_exc()
-        #    #msg_box = Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed")
-        #    msg_box = Qt.QMessageBox()
-        #    msg_box.setText("Could not connect to dataserver" + " "*100)
-        #    msg_box.setInformativeText(error)
-        #    msg_box.setDetailedText(tb)
-        #    msg_box.setMinimumWidth(1000)
-        #    msg_box.exec_()
 
     def check_connection_status(self):
         try:
@@ -400,7 +411,7 @@ class PlotWindow(Qt.QMainWindow):
     ####################
 
     def change_edit_widget(self, item, col):
-        logger.debug('Changing edit widget to %s' % '/'.join(item.path))
+        logger.debug('Changing edit widget to %s' % item.strpath)
         if self.current_edit_widget is not None:
             self.current_edit_widget.hide()
 
@@ -440,18 +451,20 @@ class PlotWindow(Qt.QMainWindow):
 
     def add_multiplot(self, parametric=False):
         selection = self.data_tree_widget.selectedItems()
-        paths = tuple(item.strpath for item in selection)
-        if parametric:
-            widget = ParametricItemWidget(selection[0].path, selection[1].path, self.dock_area)
-            self.parametric_widgets[paths] = widget
-        else:
-            widget = MultiplotItemWidget('::'.join(paths), self.dock_area)
-            self.multiplot_widgets[paths] = widget
-        widget.remove_button.clicked.connect(lambda: self.remove_multiplot(paths, parametric=parametric))
-        for item in selection:
-            self.multiplots[item.strpath].append(widget)
-            #self.background_client.update_plot(item.path)
-        self.regulate_plot_count()
+        paths = tuple(i.strpath for i in selection)
+        sources = [WindowItem.registry[i.path] for i in selection]
+        WindowMultiPlot(sources)
+
+        #if parametric:
+        #    widget = ParametricItemWidget(selection[0].path, selection[1].path, self.dock_area)
+        #    self.parametric_widgets[paths] = widget
+        #else:
+        #    widget = MultiplotItemWidget('::'.join(paths), self.dock_area)
+        #    self.multiplot_widgets[paths] = widget
+        #widget.remove_button.clicked.connect(lambda: self.remove_multiplot(paths, parametric=parametric))
+        #for item in selection:
+        #    self.multiplots[item.strpath].append(widget)
+        #    #self.background_client.update_plot(item.path)
 
     def remove_multiplot(self, paths, parametric=False):
         if parametric:
@@ -466,7 +479,7 @@ class PlotWindow(Qt.QMainWindow):
         for widget in self.multiplots['/'.join(path)]:
             widget.update_plot(path, leaf)
 
-    def configure_tree_buttons(self):
+    def configure_tree_actions(self):
         selection = self.data_tree_widget.selectedItems()
         multiplot = len(selection) > 1
         multiplot = multiplot and all(i.is_leaf() for i in selection)
@@ -475,8 +488,8 @@ class PlotWindow(Qt.QMainWindow):
         if parametric:
             item1, item2 = [WindowItem.registry[i.path] for i in selection]
             parametric = parametric and item1.data.shape[0] == item2.data.shape[0]
-        self.multiplot_button.setEnabled(multiplot)
-        self.parametric_button.setEnabled(parametric)
+        self.multiplot_action.setEnabled(multiplot)
+        #self.parametric_button.setEnabled(parametric)
 
     #def remove_selection(self):
     #    for item in self.structure_tree.selectedItems():
@@ -519,32 +532,6 @@ class PlotWindow(Qt.QMainWindow):
         else:
             for child in item.get_children():
                 self.toggle_item(child, col)
-
-    def add_plot_widget(self, path, rank=1, **kwargs):
-        if path in self.plot_widgets:
-            raise ValueError('Plot %s already exists in window' % (path,))
-        strpath = "/".join(path)
-        if rank == 1:
-            item = Rank1ItemWidget(strpath, self.dock_area, **kwargs)
-        elif rank == 2:
-            item = Rank2ItemWidget(strpath, self.dock_area, **kwargs)
-        else:
-            raise ValueError('Rank must be either 1 or 2, not ' + str(rank))
-
-        #item.clear_button.clicked.connect(lambda: self.background_client.clear_data(path))
-        #item.remove_button.clicked.connect(lambda: self.background_client.set_params(path, rank, plot=False))
-        self.register_param('update'+strpath, item.update_toggle)
-        self.plot_widgets[path] = item
-        self.plot_widgets_update_log[path] = time.time()
-        self.regulate_plot_count()
-
-    def regulate_plot_count(self):
-        widgets = list(self.plot_widgets.values()) + list(self.multiplot_widgets.values()) + list(self.parametric_widgets.values())
-        if len(filter(lambda w: w.visible, widgets)) > self.max_plots_spinner.value():
-            for p, t in sorted(self.plot_widgets_update_log.items(), key=lambda x: x[1]):
-                if self.plot_widgets[p].visible:
-                    self.toggle_item(self.tree_widgets[p], 0)
-                    break
 
     def _test_edit_widget(self, path):
         self.data_tree_widget.itemClicked.emit(self.tree_widgets[path], 0)
