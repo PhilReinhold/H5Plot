@@ -6,6 +6,7 @@ import config
 import pickle
 import sys
 import logging
+import traceback
 
 logger = logging.getLogger("Plot Window")
 logger.setLevel(logging.DEBUG)
@@ -310,37 +311,44 @@ class PlotWindow(Qt.QMainWindow):
     def setup_server(self):
         self.zbe = objsh.ZMQBackend()
         self.zbe.start_server('127.0.0.1', 55563)
-        self.connect_dataserver()
+        try:
+            self.connect_dataserver()
+        except objsh.TimeoutError:
+            logger.warning('Could not connect to dataserver on startup')
         #zbe.connect_to('tcp://127.0.0.1:55556')
         public_interface = WindowInterface(self)
         objsh.register(public_interface, 'plotwin')
         self.zbe.add_qt_timer()
 
     def connect_dataserver(self):#, addr='127.0.0.1', port=55556):
-        try:
-            addr = '127.0.0.1'
-            port = 55556
-            self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
-            self.dataserver = objsh.helper.find_object('dataserver', no_cache=True)
-            self.dataserver.connect('file-added', self.add_file)
-            for filename, proxy in self.dataserver.list_files(names_only=False).items():
-                self.add_file(filename, proxy)
-            self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
-            self.connect_dataserver_button.setEnabled(False)
-            self.connection_checker.start(500)
-            #self.dataserver.connect('data-changed', self.get_data_changed)
-            #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
-        except ValueError, e:
-            import traceback
-            error = str(e)
-            tb = traceback.format_exc()
-            Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed",
-                           "Could not connect to dataserver\n%s\n%s" % (error, tb)).exec_()
+        addr = '127.0.0.1'
+        port = 55556
+        self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
+        self.dataserver = objsh.helper.find_object('dataserver', no_cache=True)
+        self.dataserver.connect('file-added', self.add_file)
+        for filename, proxy in self.dataserver.list_files(names_only=False).items():
+            self.add_file(filename, proxy)
+        self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
+        self.connect_dataserver_button.setEnabled(False)
+        self.connection_checker.start(500)
+        #self.dataserver.connect('data-changed', self.get_data_changed)
+        #self.dataserver.connect('attrs-changed', self.get_attrs_changed)
+        #except Exception, e:
+        #    import traceback
+        #    error = str(e)
+        #    tb = traceback.format_exc()
+        #    #msg_box = Qt.QMessageBox(Qt.QMessageBox.Warning, "Connection Failed")
+        #    msg_box = Qt.QMessageBox()
+        #    msg_box.setText("Could not connect to dataserver" + " "*100)
+        #    msg_box.setInformativeText(error)
+        #    msg_box.setDetailedText(tb)
+        #    msg_box.setMinimumWidth(1000)
+        #    msg_box.exec_()
 
     def check_connection_status(self):
         try:
             self.dataserver.hello(timeout=50)
-        except ValueError:
+        except objsh.TimeoutError:
             self.connected_status.setText('Not Connected')
             self.connect_dataserver_button.setEnabled(True)
             self.connection_checker.stop()
@@ -546,9 +554,41 @@ class PlotWindow(Qt.QMainWindow):
     #def msg(self, *args):
     #    self.message_box.append(', '.join(map(str, args)))
 
+#See http://stackoverflow.com/questions/2655354/how-to-allow-resizing-of-qmessagebox-in-pyqt4
+class ResizeableMessageBox(Qt.QMessageBox):
+    def __init__(self):
+        Qt.QMessageBox.__init__(self)
+        self.setSizeGripEnabled(True)
+
+    def event(self, e):
+        result = Qt.QMessageBox.event(self, e)
+
+        self.setMinimumHeight(0)
+        self.setMaximumHeight(16777215)
+        self.setMinimumWidth(0)
+        self.setMaximumWidth(16777215)
+        self.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Expanding)
+
+        textEdit = self.findChild(Qt.QTextEdit)
+        if textEdit != None :
+            textEdit.setMinimumHeight(0)
+            textEdit.setMaximumHeight(16777215)
+            textEdit.setMinimumWidth(0)
+            textEdit.setMaximumWidth(16777215)
+            textEdit.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Expanding)
+
+        return result
+
+def excepthook(error, instance, tb):
+    msg_box = ResizeableMessageBox()
+    msg_box.setText('Caught Exception of type ' + str(error).split("'")[1])
+    msg_box.setInformativeText(str(instance))
+    msg_box.setDetailedText("".join(traceback.format_tb(tb)))
+    msg_box.exec_()
+
 
 def run_plotwindow():
-    #sys.excepthook = excepthook
+    sys.excepthook = excepthook
     app = Qt.QApplication([])
     win = PlotWindow()
     win.show()
