@@ -179,6 +179,7 @@ class WindowMultiPlot(WindowItem):
         WindowItem.__init__(self, name, multiplots_group)
 
         self.plot = MultiplotItemWidget(name)
+        self.plot.line_plt.addLegend()
 
         for source in sources:
             self.update_source(source.path)

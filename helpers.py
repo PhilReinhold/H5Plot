@@ -15,7 +15,7 @@ def valid_h5file(file_path):
         return False
 
 
-def random_color(base=128):
+def random_color(base=50):
     'A whitish random color. Adjust whiteness up by increasing base'
     return np.random.randint(base, 255, 3)
 

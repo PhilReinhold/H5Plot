@@ -249,14 +249,15 @@ class Rank1ItemWidget(ItemWidget):
         else:
             self.curve.setData(x=xdata, y=ydata, **plot_args)
 
-
 class MultiplotItemWidget(Rank1ItemWidget):
     def add_plot_widget(self, **kwargs):
         Rank1ItemWidget.add_plot_widget(self, **kwargs)
-        self.curves = defaultdict(lambda: self.line_plt.plot([], pen=tuple(helpers.random_color())))
+        self.curves = {}
 
-    def update(self, path, data, attrs=None):
-        self.curve = self.curves[path]
+    def update_path(self, path, data, attrs=None):
+        if path not in self.curves:
+            self.curves[path] = self.line_plt.plot([], pen=tuple(helpers.random_color()), name='/'.join(path))
+        self.curve = self.curves[path] # This is kind of a hack isn't it. How do you OOP again?
         Rank1ItemWidget.update_plot(self, data, attrs)
 
 
