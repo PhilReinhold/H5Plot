@@ -225,6 +225,8 @@ class WindowInterface:
         return { k: v for k, v in WindowItem.registry.items() if isinstance(v, WindowPlot) }
 
     def add_plot(self, name):
+        if (name,) in WindowItem.registry:
+            return WindowItem.registry[(name,)]
         return WindowPlot(name, None)
 
     def quit(self):
