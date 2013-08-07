@@ -7,6 +7,7 @@ import pyqtgraph
 import pyqtgraph as pg
 import pyqtgraph.dockarea
 import numpy as np
+import time
 
 import helpers
 
@@ -14,21 +15,43 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
         pyqtgraph.dockarea.DockArea.__init__(self, *args, **kwargs)
         self.insert_location = 'bottom'
-        self.last_dock = None
+        self.last_dock, self.second_last_dock = None, None
+        self._docks = {}
+        self.max_plot_count = 6
+        self.update_log = []
 
     def remove_dock(self, dock):
         dock.setParent(None)
         dock.label.setParent(None)
-        self.insert_location = 'bottom'
+        if self.insert_location == 'bottom':
+            if dock is self.last_dock:
+                self.last_dock = self.second_last_dock
+                self.insert_location = 'right'
+            elif dock is self.second_last_dock:
+                self.insert_location = 'right'
+        elif dock is self.last_dock:
+                self.insert_location = 'bottom'
 
+        self._docks.pop(dock.ident)
+        dock.window_item.update_tree_item(visible=False)
+
+    def set_max_plots(self, n):
+        self.max_plot_count = n
 
     def add_dock_auto_location(self, dock):
+        self._docks[dock.ident] = dock
+        dock.timestamp = time.time()
+        while len(self._docks) > self.max_plot_count:
+            least_recently_edited = sorted(self._docks.values(), key=lambda d: d.timestamp)[0]
+            self.remove_dock(least_recently_edited)
+
         if self.insert_location == 'right':
             self.addDock(dock, self.insert_location, self.last_dock)
         else:
             self.addDock(dock, self.insert_location)
         self.insert_location = {'bottom':'right', 'right':'bottom'}[self.insert_location]
-        self.last_dock = dock
+        self.second_last_dock, self.last_dock = self.last_dock, dock
+
 
 class NodeEditWidget(Qt.QFrame):
     def __init__(self, path, attrs):
@@ -152,14 +175,17 @@ class LeafEditWidget(NodeEditWidget):
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
     dock_area = None
-    def __init__(self, ident, **kwargs):
+    def __init__(self, item, **kwargs):
+        ident = item.strpath
         if len(ident) > 25:
             name = '... ' + ident.split('/')[-1]
         else:
             name = ident
         pyqtgraph.dockarea.Dock.__init__(self, name)
+        self.timestamp = time.time()
         self.label.setFont(Qt.QFont('Helvetica', pointSize=14))
         self.ident = ident
+        self.window_item = item
         self.add_plot_widget(**kwargs)
         self.buttons_widget = Qt.QWidget() #QHBoxWidget()
         self.buttons_widget.setLayout(Qt.QHBoxLayout())
@@ -194,7 +220,7 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
         raise NotImplementedError
 
     def update_plot(self, data, attrs=None):
-        raise NotImplementedError
+        self.timestamp = time.time()
 
     def clear_plot(self):
         raise NotImplementedError
@@ -205,8 +231,8 @@ class Rank1ItemWidget(ItemWidget):
     plot_attrs = ["x0", "xscale",
                   "xlabel", "ylabel",
                   "parametric", "plot_args"]
-    def __init__(self, ident, **kwargs):
-        ItemWidget.__init__(self, ident, **kwargs)
+    def __init__(self, item, **kwargs):
+        ItemWidget.__init__(self, item, **kwargs)
 
     def add_plot_widget(self, **kwargs):
         self.line_plt = pyqtgraph.PlotWidget(**kwargs)
@@ -215,6 +241,7 @@ class Rank1ItemWidget(ItemWidget):
         self.curve = None
 
     def update_plot(self, data, attrs=None):
+        super(Rank1ItemWidget, self).update_plot(data, attrs)
         if attrs is None:
             attrs = {}
 
@@ -248,6 +275,12 @@ class Rank1ItemWidget(ItemWidget):
             self.curve = self.line_plt.plot(xdata, ydata, **plot_args)
         else:
             self.curve.setData(x=xdata, y=ydata, **plot_args)
+
+    def clear_plot(self):
+        if self.curve is not None:
+            self.line_plt.removeItem(self.curve)
+            self.curve = None
+
 
 class MultiplotItemWidget(Rank1ItemWidget):
     def add_plot_widget(self, **kwargs):
@@ -298,8 +331,8 @@ class Rank2ItemWidget(Rank1ItemWidget):
                   "y0", "yscale",
                   "xlabel", "ylabel", "zlabel",
                   "parametric", "plot_args"]
-    def __init__(self, ident, **kwargs):
-        Rank1ItemWidget.__init__(self, ident, **kwargs)
+    def __init__(self, item, **kwargs):
+        Rank1ItemWidget.__init__(self, item, **kwargs)
 
         self.histogram_check = Qt.QCheckBox('Histogram')
         self.histogram_check.stateChanged.connect(self.img_view.set_histogram)
@@ -329,6 +362,7 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.curve = None
 
     def update_plot(self, data, attrs=None):
+        super(Rank2ItemWidget, self).update_plot(data[-1, :], attrs)
         if attrs is None:
             attrs = {}
 
@@ -382,13 +416,6 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.recent_button.show()
         self.accum_button.hide()
 
-def RankNItemWidget(rank, path, **kwargs):
-    if rank == 1:
-        return Rank1ItemWidget('/'.join(path), **kwargs)
-    elif rank == 2:
-        return Rank2ItemWidget('/'.join(path), **kwargs)
-    else:
-        raise Exception('No rank ' + str(rank) + ' item widget')
 
 class CrossSectionWidget(pg.ImageView):
     def __init__(self, trace_size=80, **kwargs):

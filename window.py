@@ -142,8 +142,15 @@ class WindowPlot(WindowItem):
     def set_data(self, data):
         self.data = np.array(data)
         self.rank = self.get_rank()
+
         if self.plot is None:
-            self.plot = RankNItemWidget(self.rank, self.path)
+            if self.rank is 1:
+                self.plot = Rank1ItemWidget(self)
+            elif self.rank is 2:
+                self.plot = Rank2ItemWidget(self)
+            else:
+                raise Exception('No rank ' + str(self.rank) + ' item widget')
+
         self.plot.update_plot(self.data, self.attrs)
         self.emit('data-changed')
         self.update_tree_item(shape=self.data.shape, visible=self.plot.is_visible())
@@ -273,6 +280,7 @@ class PlotWindow(Qt.QMainWindow):
         # Spinner setting number of plots to display simultaneously by default
         self.max_plots_spinner = Qt.QSpinBox()
         self.max_plots_spinner.setValue(6)
+        self.max_plots_spinner.valueChanged.connect(self.dock_area.set_max_plots)
         max_plots_widget = Qt.QWidget()
         max_plots_widget.setLayout(Qt.QHBoxLayout())
         max_plots_widget.layout().addWidget(Qt.QLabel('Maximum Plot Count'))
