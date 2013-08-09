@@ -108,7 +108,6 @@ class NodeEditWidget(Qt.QFrame):
                 self.attr_list_items[k].setText(2, str(type(v)))
 
     def check_attr_name(self, name):
-        print self.attr_list.findItems("", Qt.Qt.MatchContains)
         if any(i.text(0) == name for i in self.attr_list.findItems("", Qt.Qt.MatchContains)):
             if self.new_attr:
                 self.new_attr = False
@@ -152,26 +151,6 @@ class NodeEditWidget(Qt.QFrame):
             self.attr_value_edit.setText("")
             return name, value
 
-
-class LeafEditWidget(NodeEditWidget):
-    param_attrs = ['x0', 'y0', 'xscale', 'yscale', 'xlabel', 'ylabel', 'zlabel', 'parametric']
-    def __init__(self, path, attrs):
-        NodeEditWidget.__init__(self, path, attrs)
-        self.params_box = Qt.QWidget()
-        self.params_box.setLayout(Qt.QGridLayout())
-        for i, name in enumerate(self.param_attrs):
-            row, column = int(i / 4), i % 4
-            button = Qt.QPushButton(name)
-            # Gah, lexical scoping!
-            button.clicked.connect((lambda n: (lambda: self.attr_name_edit.setText(n)))(name))
-            self.params_box.layout().addWidget(button, row, column)
-        self.layout().addWidget(self.params_box)
-        #self.rank = leaf.rank
-
-    def add_attribute(self):
-        name, value = NodeEditWidget.add_attribute(self)
-        if name in self.param_attrs:
-            self.background_client.set_params(self.path, self.rank, **{name:value})
 
 class ItemWidget(pyqtgraph.dockarea.Dock):
     dock_area = None
@@ -511,7 +490,6 @@ class CrossSectionWidget(pg.ImageView):
             #(min_view_x, max_view_x), (min_view_y, max_view_y) = self.imageItem.getViewBox().viewRange()
             #idx_x = helpers.linterp(view_coords.x(), min_view_x, max_view_x, 0, max_x)
             #idx_y = helpers.linterp(view_coords.y(), min_view_y, max_view_y, 0, max_y)
-            #print view_coords.x(), min_view_x, max_view_x, max_x, idx_x
             self.x_cross_index = max(min(int(item_x), max_x-1), 0)
             self.y_cross_index = max(min(int(item_y), max_y-1), 0)
             self.update_cross_section()

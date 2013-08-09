@@ -57,7 +57,7 @@ class WindowItem(object):
             self.tree_item.setText(2, str(visible))
 
     def update_attrs(self, attrs):
-        self.attrs.update_attrs(attrs)
+        self.attrs.update(attrs)
         self.attrs_widget.update_attrs(attrs)
 
     def remove(self):
@@ -99,6 +99,7 @@ class WindowDataGroup(WindowItem):
         self.attrs_widget.set_proxy(self.proxy)
 
         self.attrs = self.proxy.get_attrs()
+        self.update_attrs(self.attrs)
 
         if not self.is_dataset():
             self.children = {}
@@ -108,7 +109,8 @@ class WindowDataGroup(WindowItem):
             self.proxy.connect('changed', self.update_child)
             self.proxy.connect('group-added', self.add_group)
             #TODO connect removed
-            self.proxy.connect('attrs-changed', self.update_attrs)
+
+        self.proxy.connect('attrs-changed', self.update_attrs)
 
     def is_dataset(self):
         return isinstance(self, WindowDataSet)
@@ -135,13 +137,29 @@ class WindowPlot(WindowItem):
         self.data = None
         self.rank = None
         self.plot = None
-        self.attrs = {}
 
         objsh.register(self, self.strpath)
 
     def set_data(self, data):
         self.data = np.array(data)
         self.rank = self.get_rank()
+
+        default_attrs = {
+            'x0': 0,
+            'xscale': 1,
+            'xlabel': 'X',
+            'ylabel': 'Y',
+        }
+        if self.rank is 2:
+            default_attrs.update({
+                'y0': 0,
+                'yscale': 1,
+                'zlabel': 'Z',
+            })
+        # Update, but don't overwrite
+        self.update_attrs(
+            {k: v for k, v in default_attrs.items() if k not in self.attrs}
+        )
 
         if self.plot is None:
             if self.rank is 1:
@@ -221,7 +239,7 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
-        if any(key in self.plot.plot_attrs for key in attrs.keys()):
+        if self.plot and any(key in self.plot.plot_attrs for key in attrs.keys()):
             self.plot.update_plot(self.data, self.attrs)
 
 
@@ -266,21 +284,6 @@ class PlotWindow(Qt.QMainWindow):
         self.centralWidget().addWidget(self.dock_area)
         self.centralWidget().setSizes([250, 1000])
 
-        # Server-Oriented Buttons
-        self.connect_dataserver_button = Qt.QPushButton('Connect to Data Server')
-        self.connect_dataserver_button.clicked.connect(self.connect_dataserver)
-        self.sidebar.layout().addWidget(self.connect_dataserver_button)
-
-        # File-Oriented Buttons
-        self.load_file_button = Qt.QPushButton('Load File')
-        self.save_view_button = Qt.QPushButton('Save View')
-        self.load_view_button = Qt.QPushButton('Load View')
-        self.load_file_button.clicked.connect(self.load_file)
-        self.sidebar.layout().addWidget(self.load_file_button)
-        self.sidebar.layout().addWidget(self.save_view_button)
-        self.sidebar.layout().addWidget(self.load_view_button)
-        self.auto_load_file = True
-
         # Spinner setting number of plots to display simultaneously by default
         self.max_plots_spinner = Qt.QSpinBox()
         self.max_plots_spinner.setValue(6)
@@ -315,16 +318,6 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.addAction(self.parametric_action)
         self.data_tree_widget.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
 
-        # Plot-Oriented Buttons
-        #self.multiplot_button = Qt.QPushButton('Plot Multiple Items')
-        #self.multiplot_button.clicked.connect(self.add_multiplot)
-        #self.multiplot_button.setEnabled(False)
-        #self.parametric_button = Qt.QPushButton('Plot Pair Parametrically')
-        #self.parametric_button.clicked.connect(lambda: self.add_multiplot(parametric=True))
-        #self.parametric_button.setEnabled(False)
-        #self.sidebar.layout().addWidget(self.multiplot_button)
-        #self.sidebar.layout().addWidget(self.parametric_button)
-
         # Attribute Editor Area
         attrs_widget_box = Qt.QWidget()
         attrs_widget_box.setLayout(Qt.QVBoxLayout())
@@ -343,11 +336,13 @@ class PlotWindow(Qt.QMainWindow):
         self.connection_checker.timeout.connect(self.check_connection_status)
 
         # Menu bar
-        #file_menu = self.menuBar().addMenu('File')
-        #Ifile_menu.addAction('Save').triggered.connect(lambda checked: self.background_client.save_all())
-        #file_menu.addAction('Load').triggered.connect(lambda checked: self.load())
-        #file_menu.addAction('Load (readonly)').triggered.connect(lambda checked: self.load(readonly=True))
-        #file_menu.addAction('Clear').triggered.connect(lambda checked: self.background_client.clear_all_data())
+        file_menu = self.menuBar().addMenu('File')
+        self.connect_to_server_action = Qt.QAction('Connect to Dataserver', self)
+        self.connect_to_server_action.triggered.connect(lambda checked: self.load_file())
+        file_menu.addAction(self.connect_to_server_action)
+        self.load_file_action = Qt.QAction('Load File', self)
+        self.load_file_action.triggered.connect(lambda checked: self.load_file())
+        file_menu.addAction(self.load_file_action)
 
         # Message Box
         #self.message_box = Qt.QTextEdit()
@@ -383,15 +378,17 @@ class PlotWindow(Qt.QMainWindow):
         for filename, proxy in self.dataserver.list_files(names_only=False).items():
             self.add_file(filename, proxy)
         self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
-        self.connect_dataserver_button.setEnabled(False)
-        self.connection_checker.start(500)
+        self.connect_to_server_action.setEnabled(False)
+        self.load_file_action.setEnabled(True)
+        self.connection_checker.start(1000)
 
     def check_connection_status(self):
         try:
             self.dataserver.hello(timeout=50)
         except objsh.TimeoutError:
             self.connected_status.setText('Not Connected')
-            self.connect_dataserver_button.setEnabled(True)
+            self.connect_to_server_action.setEnabled(True)
+            self.load_file_action.setEnabled(False)
             self.connection_checker.stop()
 
     def add_file(self, filename, proxy=None):
@@ -518,26 +515,6 @@ class PlotWindow(Qt.QMainWindow):
     #        # Sorry.
     #        self.background_client.remove_item(item.path)
 
-    def remove_item(self, path):
-        item = self.tree_widgets[path]
-
-        if item.is_leaf():
-            print 'window.remove_item', path
-            widget = self.plot_widgets.pop(item.path)
-            widget.visible = False
-            widget.close()
-            widget.destroy() # This might be voodoo
-
-        if item.parent() and item.parent().childCount == 1:
-            self.remove_item(path[:-1])
-
-        root = self.data_tree_widget.invisibleRootItem()
-        (item.parent() or root).removeChild(item)
-
-        attr_widget = self.attrs_widgets.pop(path)
-        attr_widget.close()
-        attr_widget.destroy()
-
     def toggle_path(self, path):
         self.toggle_item(self.tree_widgets[path], 0)
 
@@ -550,27 +527,6 @@ class PlotWindow(Qt.QMainWindow):
             for child in item.get_children():
                 self.toggle_item(child, col)
 
-    def _test_edit_widget(self, path):
-        self.data_tree_widget.itemClicked.emit(self.tree_widgets[path], 0)
-        self.current_edit_widget.commit_button.clicked.emit(False)
-
-    def _test_show_hide(self, path):
-        self.data_tree_widget.itemDoubleClicked.emit(self.tree_widgets[path], 0)
-        time.sleep(1)
-        self.data_tree_widget.itemDoubleClicked.emit(self.tree_widgets[path], 0)
-
-    def _test_multiplot(self, paths, parametric=False):
-        for p in paths:
-            self.data_tree_widget.setItemSelected(self.tree_widgets[p], True)
-        self.add_multiplot(parametric=parametric)
-
-    def _test_save_selection(self, paths):
-        for p in paths:
-            self.data_tree_widget.setItemSelected(self.tree_widgets[p], True)
-        self.save_selection()
-
-    #def msg(self, *args):
-    #    self.message_box.append(', '.join(map(str, args)))
 
 #See http://stackoverflow.com/questions/2655354/how-to-allow-resizing-of-qmessagebox-in-pyqt4
 class ResizeableMessageBox(Qt.QMessageBox):
