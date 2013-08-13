@@ -9,8 +9,6 @@ import pyqtgraph.dockarea
 import numpy as np
 import time
 
-import helpers
-
 class MyDockArea(pyqtgraph.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
         pyqtgraph.dockarea.DockArea.__init__(self, *args, **kwargs)
@@ -484,8 +482,6 @@ class CrossSectionWidget(pg.ImageView):
             self.v_line.setPos(view_x)
             self.h_line.setPos(view_y)
             #(min_view_x, max_view_x), (min_view_y, max_view_y) = self.imageItem.getViewBox().viewRange()
-            #idx_x = helpers.linterp(view_coords.x(), min_view_x, max_view_x, 0, max_x)
-            #idx_y = helpers.linterp(view_coords.y(), min_view_y, max_view_y, 0, max_y)
             self.x_cross_index = max(min(int(item_x), max_x-1), 0)
             self.y_cross_index = max(min(int(item_y), max_y-1), 0)
             self.update_cross_section()
