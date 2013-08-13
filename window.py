@@ -118,11 +118,23 @@ class WindowDataGroup(WindowItem):
 
     def update_child(self, key):
         if key not in self.children:
-            self.add_dataset(key)
+            if hasattr(self.proxy[key], 'keys'):
+                self.add_group(key=key)
+                return
+            else:
+                self.add_dataset(key)
         self.children[key].update_data()
 
     def add_group(self, key):
-        WindowDataGroup(key, self)
+        path = self.path + (key,)
+        if path in WindowItem.registry:
+            item = WindowItem.registry[path]
+            item.proxy = self.proxy[key]
+            return
+
+        g = WindowDataGroup(key, self)
+        for key in g.proxy.keys():
+            g.update_child(key)
 
     def add_dataset(self, key):
         WindowDataSet(key, self)
