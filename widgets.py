@@ -23,6 +23,7 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
     def remove_dock(self, dock):
         dock.setParent(None)
         dock.label.setParent(None)
+        dock.label.hide()
         if self.insert_location == 'bottom':
             if dock is self.last_dock:
                 self.last_dock = self.second_last_dock
@@ -40,6 +41,8 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
 
     def add_dock_auto_location(self, dock):
         self._docks[dock.ident] = dock
+        if not dock.label.isVisible():
+            dock.label.show()
         dock.timestamp = time.time()
         while len(self._docks) > self.max_plot_count:
             least_recently_edited = sorted(self._docks.values(), key=lambda d: d.timestamp)[0]
