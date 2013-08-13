@@ -246,7 +246,8 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     def update_data(self):
         logger.debug('Updating data at %s' % self.strpath)
         self.data = self.proxy[:]
-        self.set_data(self.data)
+        if len(self.data) > 0:
+            self.set_data(self.data)
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
