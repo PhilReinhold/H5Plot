@@ -55,11 +55,33 @@ class WindowItem(object):
             parent.tree_item.addChild(self.tree_item)
             parent.tree_item.setExpanded(True)
 
+    def root(self):
+        if self.parent is None:
+            return self
+        else:
+            return self.parent.root()
+
+    def child_plots_visible(self):
+        return any(c.child_plots_visible for c in self.children)
+
     def update_tree_item(self, shape=None, visible=None):
         if shape is not None:
             self.tree_item.setText(1, str(shape))
         if visible is not None:
             self.tree_item.setText(2, str(visible))
+        self.root().check_expand_state()
+
+    def check_expand_state(self):
+        for c in self.children.values():
+            if isinstance(c, WindowPlot):
+                if c.plot and c.plot.is_visible():
+                    self.tree_item.setExpanded(True)
+                    return True
+            elif c.check_expand_state():
+                self.tree_item.setExpanded(True)
+                return True
+        self.tree_item.setExpanded(False)
+        return False
 
     def update_attrs(self, attrs):
         self.attrs.update(attrs)
