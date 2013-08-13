@@ -333,9 +333,18 @@ class PlotWindow(Qt.QMainWindow):
         self.multiplot_action = Qt.QAction('Create Multiplot', self)
         self.multiplot_action.triggered.connect(self.add_multiplot)
         self.data_tree_widget.addAction(self.multiplot_action)
+
         self.parametric_action = Qt.QAction('Plot Pair Parametrically', self)
         self.parametric_action.triggered.connect(lambda: self.add_multiplot(True))
         self.data_tree_widget.addAction(self.parametric_action)
+
+        self.show_subtree_action = Qt.QAction('Show Subtree', self)
+        self.show_subtree_action.triggered.connect(lambda: self.toggle_selection(show=True))
+        self.data_tree_widget.addAction(self.show_subtree_action)
+
+        self.hide_subtree_action = Qt.QAction('Hide Subtree', self)
+        self.hide_subtree_action.triggered.connect(lambda: self.toggle_selection(show=False))
+        self.data_tree_widget.addAction(self.hide_subtree_action)
         self.data_tree_widget.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
 
         # Attribute Editor Area
@@ -526,17 +535,18 @@ class PlotWindow(Qt.QMainWindow):
     #        # Sorry.
     #        self.background_client.remove_item(item.path)
 
-    def toggle_path(self, path):
-        self.toggle_item(self.tree_widgets[path], 0)
+    def toggle_selection(self, show=None):
+        for item in self.data_tree_widget.selectedItems():
+            self.toggle_item(item, 0, show)
 
-    def toggle_item(self, item, col):
+    def toggle_item(self, item, col, show=None):
         if item.is_leaf():# and item.plot:
             item = WindowItem.registry[item.path]
-            item.plot.toggle_hide()
+            item.plot.toggle_hide(show=show)
             item.update_tree_item(visible=item.plot.is_visible())
         else:
             for child in item.get_children():
-                self.toggle_item(child, col)
+                self.toggle_item(child, col, show)
 
 
 #See http://stackoverflow.com/questions/2655354/how-to-allow-resizing-of-qmessagebox-in-pyqt4

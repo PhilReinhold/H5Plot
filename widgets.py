@@ -188,10 +188,13 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
     def is_visible(self):
         return self.parent() is not None
 
-    def toggle_hide(self):
-        if self.is_visible():
+    def toggle_hide(self, show=None):
+        if show is None:
+            show = not self.is_visible()
+
+        if self.is_visible() and not show:
             self.dock_area.remove_dock(self)
-        else:
+        elif show:
             self.dock_area.add_dock_auto_location(self)
 
     def update_params(self, **kwargs):
