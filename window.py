@@ -2,7 +2,6 @@ import time
 from PyQt4 import Qt
 from widgets import *
 import objectsharer as objsh
-import config
 import pickle
 import sys
 import logging
