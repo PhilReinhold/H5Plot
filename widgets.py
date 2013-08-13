@@ -17,7 +17,7 @@ class MyDockArea(pyqtgraph.dockarea.DockArea):
         self.insert_location = 'bottom'
         self.last_dock, self.second_last_dock = None, None
         self._docks = {}
-        self.max_plot_count = 6
+        self.max_plot_count = 4
         self.update_log = []
 
     def remove_dock(self, dock):
@@ -355,12 +355,6 @@ class Rank2ItemWidget(Rank1ItemWidget):
             self.clear_plot()
             return
 
-        #if show_most_recent is not None:
-        #    if show_most_recent:
-        #        self.show_recent()
-        #    else:
-        #        self.show_accumulated()
-
         if self.update_toggle.isChecked():
             self.img_view.setLabels(xlabel, ylabel, zlabel)
             Rank1ItemWidget.update_plot(self, data[-1,:], attrs)
@@ -370,9 +364,6 @@ class Rank2ItemWidget(Rank1ItemWidget):
             autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
             self.img_view.setImage(data, autoRange=autorange, pos=[x0, y0], scale=[xscale, yscale])
             self.img_view.getView().vb.enableAutoRange(enable=autorange)
-
-            if data.shape[0] == 1:
-                self.show_recent()
 
     def clear_plot(self):
         Rank1ItemWidget.clear_plot(self)

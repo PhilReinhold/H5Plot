@@ -9,10 +9,10 @@ import logging
 import traceback
 
 logger = logging.getLogger("Plot Window")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(name)s:%(levelname)s:%(message)s')
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.WARNING)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
@@ -31,6 +31,7 @@ class WindowItem(object):
             parent.children[name] = self
         self.path = parent.path if parent is not None else ()
         self.path += (name,)
+        assert self.path not in WindowItem.registry, self.path + " already exists"
         self.strpath = '/'.join(self.path)
         WindowItem.registry[self.path] = self
         self.tree_item = DataTreeWidgetItem(self.path, [name, "", ""])
@@ -132,8 +133,6 @@ class WindowPlot(WindowItem):
     """
     def __init__(self, name, parent, **kwargs):
         super(WindowPlot, self).__init__(name, parent, **kwargs)
-        if not hasattr(self, 'tree_item'):
-            WindowItem.__init__(self, name, parent)
         self.data = None
         self.rank = None
         self.plot = None
@@ -286,7 +285,7 @@ class PlotWindow(Qt.QMainWindow):
 
         # Spinner setting number of plots to display simultaneously by default
         self.max_plots_spinner = Qt.QSpinBox()
-        self.max_plots_spinner.setValue(6)
+        self.max_plots_spinner.setValue(4)
         self.max_plots_spinner.valueChanged.connect(self.dock_area.set_max_plots)
         max_plots_widget = Qt.QWidget()
         max_plots_widget.setLayout(Qt.QHBoxLayout())
@@ -338,22 +337,11 @@ class PlotWindow(Qt.QMainWindow):
         # Menu bar
         file_menu = self.menuBar().addMenu('File')
         self.connect_to_server_action = Qt.QAction('Connect to Dataserver', self)
-        self.connect_to_server_action.triggered.connect(lambda checked: self.load_file())
+        self.connect_to_server_action.triggered.connect(lambda checked: self.connect_dataserver())
         file_menu.addAction(self.connect_to_server_action)
         self.load_file_action = Qt.QAction('Load File', self)
         self.load_file_action.triggered.connect(lambda checked: self.load_file())
         file_menu.addAction(self.load_file_action)
-
-        # Message Box
-        #self.message_box = Qt.QTextEdit()
-        #self.message_box.setReadOnly(True)
-        #self.message_box.setVisible(False)
-        #self.centralWidget().addWidget(self.message_box)
-        #debug_menu = self.menuBar().addMenu('Debug')
-        #action = debug_menu.addAction('View Debug Panel')
-        #action.setCheckable(True)
-        #action.setChecked(False)
-        #action.triggered.connect(self.message_box.setVisible)
 
     #######################
     # Data Server Actions #
@@ -380,7 +368,7 @@ class PlotWindow(Qt.QMainWindow):
         self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
         self.connect_to_server_action.setEnabled(False)
         self.load_file_action.setEnabled(True)
-        self.connection_checker.start(1000)
+        #self.connection_checker.start(3000)
 
     def check_connection_status(self):
         try:
