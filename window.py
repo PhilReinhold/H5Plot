@@ -16,6 +16,11 @@ handler.setLevel(logging.WARNING)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+from dataserver import DATA_DIRECTORY
+h5file_directory = DATA_DIRECTORY
+h5file_filter = 'HDF5 Files (*.h5)'
+
+
 class WindowItem(object):
     """
     An object with a presence in the data tree
@@ -123,7 +128,8 @@ class WindowDataGroup(WindowItem):
                 return
             else:
                 self.add_dataset(key)
-        self.children[key].update_data()
+        if hasattr(self.children[key], 'update_data'): # Confusing to me...
+            self.children[key].update_data()
 
     def add_group(self, key):
         path = self.path + (key,)
@@ -200,6 +206,7 @@ class WindowPlot(WindowItem):
 
     def remove(self):
         super(WindowPlot, self).remove()
+        objsh.helper.unregister(self)
         if self.plot.is_visible():
             self.plot.toggle_hide()
         del self.plot
@@ -440,8 +447,7 @@ class PlotWindow(Qt.QMainWindow):
     ################
 
     def load_file(self):
-        filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file',
-                                                        config.h5file_directory, config.h5file_filter))
+        filename = str(Qt.QFileDialog().getOpenFileName(self, 'Load HDF5 file', h5file_directory, h5file_filter))
         if not filename:
             return
         self.dataserver.get_file(filename)

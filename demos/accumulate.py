@@ -1,10 +1,8 @@
 import numpy as np
 from dataserver import get_file
 import time
-from H5Plot.helpers import get_available_filename
 
-filename = get_available_filename(r'C:\_Data\accumulating_test')
-f = get_file(filename)
+f = get_file('accumulating_test.h5', timestamp_group=True)
 
 f.create_dataset('line', rank=1)
 f.create_dataset('img', rank=2)

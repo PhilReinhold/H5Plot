@@ -36,5 +36,9 @@ Send Data to DataServer
     f = get_file('test.h5')
     f['dataset'] = [1,3,2,4]
 
+If you don't want to create new files every time you run, consider the
+timestamp feature, which will create a new group inside the file, and return that instead
 
+  f = get_file('test.h5', timestamp_group=True)
+  f['dataset'] = [1,3,2,4]
 

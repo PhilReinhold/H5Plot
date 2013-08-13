@@ -271,7 +271,7 @@ class MultiplotItemWidget(Rank1ItemWidget):
 
     def update_path(self, path, data, attrs=None):
         if path not in self.curves:
-            self.curves[path] = self.line_plt.plot([], pen=tuple(helpers.random_color()), name='/'.join(path))
+            self.curves[path] = self.line_plt.plot([], pen=tuple(random_color()), name='/'.join(path))
         self.curve = self.curves[path] # This is kind of a hack isn't it. How do you OOP again?
         Rank1ItemWidget.update_plot(self, data, attrs)
 
@@ -491,3 +491,8 @@ class CrossSectionWidget(pg.ImageView):
     def update_cross_section(self):
         self.h_cross_section.setData(self.imageItem.image[:, self.y_cross_index])
         self.v_cross_section.setData(self.imageItem.image[self.x_cross_index, :], range(self.imageItem.image.shape[1]))
+
+
+def random_color(base=50):
+    'A whitish random color. Adjust whiteness up by increasing base'
+    return np.random.randint(base, 255, 3)

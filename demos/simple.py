@@ -1,8 +1,7 @@
 import numpy as np
-from dataserver_helpers import dataserver_client
+from dataserver import get_file
 
-c = dataserver_client()
-f = c.get_file('simple_test.h5')
+f = get_file('simple_test.h5', timestamp_group=True)
 f['lines'] = np.random.normal(size=500)
 f['image'] = np.random.normal(size=(100, 100))
 
