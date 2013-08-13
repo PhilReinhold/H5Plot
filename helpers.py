@@ -2,6 +2,15 @@ import numpy as np
 import os
 import pyqtgraph
 
+
+def get_available_filename(basename, ext=".h5"):
+    n = 0
+    proposal = lambda i: basename + ('_%04d' % n) + ext
+    while os.path.exists(proposal(n)):
+        n += 1
+    return proposal(n)
+
+
 def valid_h5file(file_path):
     if not file_path.endswith(".h5"):
         return False
