@@ -277,11 +277,10 @@ class MultiplotItemWidget(Rank1ItemWidget):
 
 
 class ParametricItemWidget(Rank1ItemWidget):
-    def __init__(self, path1, path2, **kwargs):
-        Rank1ItemWidget.__init__(self, path1[-1]+' vs '+path2[-1], **kwargs)
-        self.path1 = path1
-        self.path2 = path2
-        self.datas = { path1: [], path2: []}
+    def __init__(self, item, **kwargs):
+        Rank1ItemWidget.__init__(self, item, **kwargs)
+        self.path1, self.path2 = [i.path for i in item.sources]
+        self.datas = {self.path1: [], self.path2: []}
         self.transpose_toggle = Qt.QCheckBox('Transpose')
         self.transpose_toggle.stateChanged.connect(lambda s: self.refresh_plot())
         self.buttons_widget.layout().addWidget(self.transpose_toggle)

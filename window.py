@@ -36,8 +36,8 @@ class WindowItem(object):
             parent.children[name] = self
         self.path = parent.path if parent is not None else ()
         self.path += (name,)
-        assert self.path not in WindowItem.registry, self.path + " already exists"
         self.strpath = '/'.join(self.path)
+        assert self.path not in WindowItem.registry, self.strpath + " already exists"
         WindowItem.registry[self.path] = self
         self.tree_item = DataTreeWidgetItem(self.path, [name, "", ""])
 
@@ -213,6 +213,7 @@ class WindowPlot(WindowItem):
 
 class WindowMultiPlot(WindowItem):
     def __init__(self, sources, parametric=False):
+        self.sources = sources
         connector = " vs " if parametric else " :: "
         name = connector.join(i.name for i in sources)
 
@@ -223,7 +224,7 @@ class WindowMultiPlot(WindowItem):
         WindowItem.__init__(self, name, multiplots_group)
 
         if parametric:
-            self.plot = ParametricItemWidget(sources[0].path, sources[1].path)
+            self.plot = ParametricItemWidget(self)
         else:
             self.plot = MultiplotItemWidget(name)
             self.plot.line_plt.addLegend()
@@ -471,9 +472,12 @@ class PlotWindow(Qt.QMainWindow):
     # Multiplots #
     ##############
 
-    def add_multiplot(self, parametric=False):
-        selection = self.data_tree_widget.selectedItems()
-        sources = [WindowItem.registry[i.path] for i in selection]
+    def add_multiplot(self, parametric=False, sourcepaths=None):
+        if sourcepaths is None:
+            selection = self.data_tree_widget.selectedItems()
+            sources = [WindowItem.registry[i.path] for i in selection]
+        else:
+            sources = [WindowItem.registry[path] for path in sourcepaths]
         WindowMultiPlot(sources, parametric)
 
         #if parametric:
