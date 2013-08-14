@@ -5,6 +5,7 @@ import warnings
 from PyQt4 import Qt
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
+from pyqtgraph.opengl.GLGraphicsItem import GLGraphicsItem
 import pyqtgraph.dockarea
 import numpy as np
 import time
@@ -414,20 +415,21 @@ class Rank2ItemWidget(Rank1ItemWidget):
             self.img_view.setLabels(xlabel, ylabel, zlabel)
             Rank1ItemWidget.update_plot(self, data[-1,:], attrs)
 
-            # self.img_view.imageItem.show()
             # Well, this is a hack. I'm not sure why autorange is disabled after setImage
             autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
             self.img_view.setImage(data, autoRange=autorange, pos=[x0, y0], scale=[xscale, yscale])
             self.img_view.getView().vb.enableAutoRange(enable=autorange)
 
             if self.gl_view is not None:
-                if self.surface is None:
+                if self.surface is None or data.shape != self.surface._z.shape:
                     x1 = x0 + data.shape[0]*xscale
                     y1 = y0 + data.shape[1]*yscale
                     xs = np.arange(x0, x1, xscale)
                     ys = np.arange(y0, y1, yscale)
                     #grid = gl.GLGridItem()
                     #self.gl_view.addItem(grid)
+                    if self.surface is not None:
+                        self.gl_view.removeItem(self.surface)
                     self.surface = gl.GLSurfacePlotItem(x=xs, y=ys, shader='shaded')
                     self.gl_view.addItem(self.surface)
                 self.surface.setData(z=data)
@@ -449,6 +451,17 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.line_plt.hide()
         self.recent_button.show()
         self.accum_button.hide()
+
+class Rank2ParametricWidget(ItemWidget):
+    def add_plot_widget(self):
+        self.gl_view = gl.GLViewWidget()
+        self.gl_view.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Expanding)
+        self.plots_widget.layout().addWidget(self.gl_view)
+        self.scatter = gl.GLScatterPlotItem(color=(1,1,1,.3), size=.1, pxMode=False)
+        self.gl_view.addItem(self.scatter)
+
+    def update_plot(self, data, attrs=None):
+        self.scatter.setData(pos=data)
 
 
 class CrossSectionWidget(pg.ImageView):
@@ -553,7 +566,6 @@ class CrossSectionWidget(pg.ImageView):
     def update_cross_section(self):
         self.h_cross_section.setData(self.imageItem.image[:, self.y_cross_index])
         self.v_cross_section.setData(self.imageItem.image[self.x_cross_index, :], range(self.imageItem.image.shape[1]))
-
 
 def random_color(base=50):
     'A whitish random color. Adjust whiteness up by increasing base'

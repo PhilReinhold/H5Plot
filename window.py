@@ -203,7 +203,10 @@ class WindowPlot(WindowItem):
             if self.rank is 1:
                 self.plot = Rank1ItemWidget(self)
             elif self.rank is 2:
-                self.plot = Rank2ItemWidget(self)
+                if self.is_parametric():
+                    self.plot = Rank2ParametricWidget(self)
+                else:
+                    self.plot = Rank2ItemWidget(self)
             else:
                 raise Exception('No rank ' + str(self.rank) + ' item widget')
 
