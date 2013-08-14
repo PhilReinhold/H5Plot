@@ -3,15 +3,15 @@ from copy import copy
 import warnings
 
 from PyQt4 import Qt
-import pyqtgraph
 import pyqtgraph as pg
+import pyqtgraph.opengl as gl
 import pyqtgraph.dockarea
 import numpy as np
 import time
 
-class MyDockArea(pyqtgraph.dockarea.DockArea):
+class MyDockArea(pg.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
-        pyqtgraph.dockarea.DockArea.__init__(self, *args, **kwargs)
+        pg.dockarea.DockArea.__init__(self, *args, **kwargs)
         self.insert_location = 'bottom'
         self.last_dock, self.second_last_dock = None, None
         self._docks = {}
@@ -153,20 +153,32 @@ class NodeEditWidget(Qt.QFrame):
             return name, value
 
 
-class ItemWidget(pyqtgraph.dockarea.Dock):
+class ItemWidget(pg.dockarea.Dock):
     dock_area = None
     def __init__(self, item, **kwargs):
         ident = item.strpath
-        if len(ident) > 25:
-            name = '... ' + ident.split('/')[-1]
-        else:
-            name = ident
-        pyqtgraph.dockarea.Dock.__init__(self, name)
+
+        label_text = item.path[-1]
+        for p in reversed(item.path[:-1]):
+            new_label_text = p + '/' + label_text
+            if len(new_label_text) > 25:
+                label_text = '...' + label_text
+                break
+            label_text = new_label_text
+
+
+        pg.dockarea.Dock.__init__(self, label_text)
         self.timestamp = time.time()
         self.label.setFont(Qt.QFont('Helvetica', pointSize=14))
         self.ident = ident
         self.window_item = item
+
+        self.plots_widget = Qt.QWidget()
+        self.plots_widget.setLayout(Qt.QVBoxLayout())
+        self.addWidget(self.plots_widget)
+
         self.add_plot_widget(**kwargs)
+
         self.buttons_widget = Qt.QWidget() #QHBoxWidget()
         self.buttons_widget.setLayout(Qt.QHBoxLayout())
         self.remove_button = Qt.QPushButton('Hide')
@@ -174,12 +186,13 @@ class ItemWidget(pyqtgraph.dockarea.Dock):
         self.clear_button = Qt.QPushButton('Clear') # Connected to manager action
         self.update_toggle = Qt.QCheckBox('Update')
         self.update_toggle.setChecked(True)
-        #self.autoscale_toggle = Qt.QCheckBox('AutoScale')
-        #self.autoscale_toggle.setChecked(True)
+
+
         self.buttons_widget.layout().addWidget(self.remove_button)
         self.buttons_widget.layout().addWidget(self.clear_button)
         self.buttons_widget.layout().addWidget(self.update_toggle)
         #self.buttons_widget.layout().addWidget(self.autoscale_toggle)
+        self.addWidget
         self.addWidget(self.buttons_widget)
         self.dock_area.add_dock_auto_location(self)
 
@@ -218,9 +231,9 @@ class Rank1ItemWidget(ItemWidget):
         ItemWidget.__init__(self, item, **kwargs)
 
     def add_plot_widget(self, **kwargs):
-        self.line_plt = pyqtgraph.PlotWidget(**kwargs)
+        self.line_plt = pg.PlotWidget(**kwargs)
         self.line_plt.plotItem.showGrid(x=True, y=True)
-        self.addWidget(self.line_plt)
+        self.plots_widget.layout().addWidget(self.line_plt)
         self.curve = None
 
     def update_plot(self, data, attrs=None):
@@ -315,30 +328,69 @@ class Rank2ItemWidget(Rank1ItemWidget):
 
         self.histogram_check = Qt.QCheckBox('Histogram')
         self.histogram_check.stateChanged.connect(self.img_view.set_histogram)
-        self.recent_button = Qt.QPushButton('Most Recent Trace')
-        self.recent_button.clicked.connect(self.show_recent)
-        self.accum_button = Qt.QPushButton('Accumulated Traces')
-        self.accum_button.clicked.connect(self.show_accumulated)
-        self.accum_button.hide()
+
+        img_radio = Qt.QRadioButton("Image")
+        img_radio.clicked.connect(self.show_img_plot)
+        gl_radio = Qt.QRadioButton("Surface")
+        gl_radio.clicked.connect(self.show_gl_plot)
+        line_radio = Qt.QRadioButton("Last Line")
+        line_radio.clicked.connect(self.show_line_plot)
+        self.view_switcher = Qt.QGroupBox("View")
+        self.view_switcher.setLayout(Qt.QHBoxLayout())
+        self.view_switcher.layout().addWidget(img_radio)
+        self.view_switcher.layout().addWidget(gl_radio)
+        self.view_switcher.layout().addWidget(line_radio)
+
         self.buttons_widget.layout().addWidget(self.histogram_check)
-        self.buttons_widget.layout().addWidget(self.recent_button)
-        self.buttons_widget.layout().addWidget(self.accum_button)
+        self.buttons_widget.layout().addWidget(self.view_switcher)
+
+        #self.recent_button = Qt.QPushButton('Most Recent Trace')
+        #self.recent_button.clicked.connect(self.show_recent)
+        #self.accum_button = Qt.QPushButton('Accumulated Traces')
+        #self.accum_button.clicked.connect(self.show_accumulated)
+        #self.accum_button.hide()
+
+        #self.buttons_widget.layout().addWidget(self.recent_button)
+        #self.buttons_widget.layout().addWidget(self.accum_button)
+
+    def show_img_plot(self):
+        self.line_plt.hide()
+        if self.gl_view is not None:
+            self.gl_view.hide()
+        self.img_view.show()
+        self.histogram_check.show()
+
+    def show_gl_plot(self):
+        self.line_plt.hide()
+        self.img_view.hide()
+        self.histogram_check.hide()
+        if self.gl_view is None:
+            self.gl_view = gl.GLViewWidget()
+            self.gl_view.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Expanding)
+            self.plots_widget.layout().addWidget(self.gl_view)
+            if self.img_view.image is not None:
+                self.update_plot(self.img_view.image)
+        self.gl_view.show()
+
+    def show_line_plot(self):
+        self.img_view.hide()
+        self.histogram_check.hide()
+        if self.gl_view is not None:
+            self.gl_view.hide()
+        self.line_plt.show()
+
 
     def add_plot_widget(self, **kwargs):
         Rank1ItemWidget.add_plot_widget(self)
-        self.line_plt.hide() # By default, start out with accum view
-
-        # plt/view explanation here
-        # https://groups.google.com/d/msg/pyqtgraph/ccrYl1yyasw/fD9tLrco1PYJ
-        # TODO: Identify and separate 1d kwargs and 2d kwargs
-        #self.img_plt = pyqtgraph.PlotItem(title=self.ident)
-        #self.img_view = pyqtgraph.ImageView(view=self.img_plt)
-        self.img_view = CrossSectionWidget()
-        self.addWidget(self.img_view)
-
-        #self.line_plt = pyqtgraph.PlotWidget(parent=self, title=self.ident)
-        self.addWidget(self.line_plt)
+        self.line_plt.hide()
         self.curve = None
+
+        self.img_view = CrossSectionWidget()
+        self.plots_widget.layout().addWidget(self.img_view)
+        #self.addWidget(self.line_plt)
+
+        self.gl_view = None
+        self.surface = None
 
     def update_plot(self, data, attrs=None):
         super(Rank2ItemWidget, self).update_plot(data[-1, :], attrs)
@@ -367,6 +419,18 @@ class Rank2ItemWidget(Rank1ItemWidget):
             autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
             self.img_view.setImage(data, autoRange=autorange, pos=[x0, y0], scale=[xscale, yscale])
             self.img_view.getView().vb.enableAutoRange(enable=autorange)
+
+            if self.gl_view is not None:
+                if self.surface is None:
+                    x1 = x0 + data.shape[0]*xscale
+                    y1 = y0 + data.shape[1]*yscale
+                    xs = np.arange(x0, x1, xscale)
+                    ys = np.arange(y0, y1, yscale)
+                    #grid = gl.GLGridItem()
+                    #self.gl_view.addItem(grid)
+                    self.surface = gl.GLSurfacePlotItem(x=xs, y=ys, shader='shaded')
+                    self.gl_view.addItem(self.surface)
+                self.surface.setData(z=data)
 
     def clear_plot(self):
         Rank1ItemWidget.clear_plot(self)
