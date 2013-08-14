@@ -247,7 +247,7 @@ class WindowMultiPlot(WindowItem):
         if parametric:
             self.plot = ParametricItemWidget(self)
         else:
-            self.plot = MultiplotItemWidget(name)
+            self.plot = MultiplotItemWidget(self)
             self.plot.line_plt.addLegend()
 
         for source in sources:
