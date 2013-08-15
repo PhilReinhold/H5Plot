@@ -234,7 +234,7 @@ class Rank1ItemWidget(ItemWidget):
         ItemWidget.__init__(self, item, **kwargs)
 
     def add_plot_widget(self, **kwargs):
-        self.line_plt = pg.PlotWidget(**kwargs)
+        self.line_plt = CrosshairPlotWidget(**kwargs)
         self.line_plt.plotItem.showGrid(x=True, y=True)
         self.plots_widget.layout().addWidget(self.line_plt)
         self.curve = None
@@ -249,6 +249,7 @@ class Rank1ItemWidget(ItemWidget):
         xlabel = attrs.get("xlabel", "X")
         ylabel = attrs.get("ylabel", "Y")
         parametric = attrs.get("parametric", False)
+        self.line_plt.parametric = parametric
         plot_args = attrs.get("plot_args", {})
 
 
@@ -462,6 +463,79 @@ class Rank2ParametricWidget(ItemWidget):
         self.scatter.setData(pos=data)
 
 
+class CrosshairPlotWidget(pg.PlotWidget):
+    def __init__(self, parametric=False, *args, **kwargs):
+        super(CrosshairPlotWidget, self).__init__(*args, **kwargs)
+        self.scene().sigMouseClicked.connect(self.toggle_search)
+        self.scene().sigMouseMoved.connect(self.handle_mouse_move)
+        self.cross_section_enabled = False
+        self.parametric = parametric
+        self.search_mode = True
+        self.label = None
+
+    def toggle_search(self, mouse_event):
+        if mouse_event.double():
+            if self.cross_section_enabled:
+                self.hide_cross_hair()
+            else:
+                self.add_cross_hair()
+        elif self.cross_section_enabled:
+            self.search_mode = not self.search_mode
+            if self.search_mode:
+                self.handle_mouse_move(mouse_event.scenePos())
+
+    def handle_mouse_move(self, mouse_event):
+        if self.cross_section_enabled and self.search_mode:
+            item = self.getPlotItem()
+            if len(item.items) == 0:
+                return
+            data_item = item.items[0] # TODO, search through items for closest match?
+            xdata, ydata = data_item.xData, data_item.yData
+
+            vb = item.getViewBox()
+            view_coords = vb.mapSceneToView(mouse_event)
+            view_x, view_y = view_coords.x(), view_coords.y()
+            item_coords = item.mapFromScene(mouse_event)
+            item_x, item_y = item_coords.x(), item_coords.y()
+            #max_x, max_y = self.imageItem.image.shape
+            #if item_x < 0 or item_x > max_x or item_y < 0 or item_y > max_y:
+            #    return
+            if self.parametric:
+                index_distance = lambda i: (xdata[i]-view_x)**2 + (ydata[i] - view_y)**2
+                index = min(range(len(xdata)), key=index_distance)
+            else:
+                index = min(np.searchsorted(xdata, view_x), len(xdata)-1)
+                if index and xdata[index] - view_x > view_x - xdata[index - 1]:
+                    index -= 1
+            pt_x, pt_y = xdata[index], ydata[index]
+
+            self.v_line.setPos(pt_x)
+            self.h_line.setPos(pt_y)
+            self.label.setText("x=%.2e, y=%.2e" % (pt_x, pt_y))
+            #self.getPlotItem().titleLabel.setText("x=%.2e, y=%.2e" % (pt_x, pt_y))
+            #(min_view_x, max_view_x), (min_view_y, max_view_y) = self.imageItem.getViewBox().viewRange()
+            #self.x_cross_index = max(min(int(item_x), max_x-1), 0)
+            #self.y_cross_index = max(min(int(item_y), max_y-1), 0)
+            #self.update_cross_section()
+
+    def add_cross_hair(self):
+        self.h_line = pg.InfiniteLine(angle=0, movable=False)
+        self.v_line = pg.InfiniteLine(angle=90, movable=False)
+        self.addItem(self.h_line, ignoreBounds=False)
+        self.addItem(self.v_line, ignoreBounds=False)
+        if self.label is None:
+            self.label = pg.LabelItem(justify="right")
+            self.getPlotItem().layout.addItem(self.label, 4, 1)
+        self.x_cross_index = 0
+        self.y_cross_index = 0
+        self.cross_section_enabled = True
+
+    def hide_cross_hair(self):
+        self.removeItem(self.h_line)
+        self.removeItem(self.v_line)
+        self.cross_section_enabled = False
+
+
 class CrossSectionWidget(pg.ImageView):
     def __init__(self, trace_size=80, **kwargs):
         view = pg.PlotItem(labels=kwargs.pop('labels', None))
@@ -540,7 +614,7 @@ class CrossSectionWidget(pg.ImageView):
     def toggle_search(self, mouse_event):
         if mouse_event.double():
             self.toggle_cross_section()
-        else:
+        elif self.cross_section_enabled:
             self.search_mode = not self.search_mode
             if self.search_mode:
                 self.handle_mouse_move(mouse_event.scenePos())
