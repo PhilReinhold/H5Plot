@@ -184,16 +184,18 @@ class ItemWidget(pg.dockarea.Dock):
         self.buttons_widget.setLayout(Qt.QHBoxLayout())
         self.remove_button = Qt.QPushButton('Hide')
         self.remove_button.clicked.connect(self.toggle_hide)
-        self.clear_button = Qt.QPushButton('Clear') # Connected to manager action
         self.update_toggle = Qt.QCheckBox('Update')
         self.update_toggle.setChecked(True)
 
 
         self.buttons_widget.layout().addWidget(self.remove_button)
-        self.buttons_widget.layout().addWidget(self.clear_button)
         self.buttons_widget.layout().addWidget(self.update_toggle)
-        #self.buttons_widget.layout().addWidget(self.autoscale_toggle)
-        self.addWidget
+        self.buttons_widget.setContentsMargins(0, 0, 0, 0)
+        self.buttons_widget.layout().setContentsMargins(0, 0, 0, 0)
+        self.buttons_widget.layout().setAlignment(Qt.Qt.AlignLeft)
+        self.plots_widget.setContentsMargins(0, 0, 0, 0)
+        self.plots_widget.layout().setContentsMargins(0, 0, 0, 0)
+
         self.addWidget(self.buttons_widget)
         self.dock_area.add_dock_auto_location(self)
 
@@ -336,14 +338,10 @@ class Rank2ItemWidget(Rank1ItemWidget):
         gl_radio.clicked.connect(self.show_gl_plot)
         line_radio = Qt.QRadioButton("Last Line")
         line_radio.clicked.connect(self.show_line_plot)
-        self.view_switcher = Qt.QGroupBox("View")
-        self.view_switcher.setLayout(Qt.QHBoxLayout())
-        self.view_switcher.layout().addWidget(img_radio)
-        self.view_switcher.layout().addWidget(gl_radio)
-        self.view_switcher.layout().addWidget(line_radio)
-
         self.buttons_widget.layout().addWidget(self.histogram_check)
-        self.buttons_widget.layout().addWidget(self.view_switcher)
+        self.buttons_widget.layout().addWidget(img_radio)
+        self.buttons_widget.layout().addWidget(gl_radio)
+        self.buttons_widget.layout().addWidget(line_radio)
 
         #self.recent_button = Qt.QPushButton('Most Recent Trace')
         #self.recent_button.clicked.connect(self.show_recent)
