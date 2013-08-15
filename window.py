@@ -53,7 +53,7 @@ class WindowItem(object):
             self.data_tree_widget.addTopLevelItem(self.tree_item)
         else:
             parent.tree_item.addChild(self.tree_item)
-            parent.tree_item.setExpanded(True)
+            #parent.tree_item.setExpanded(True)
 
     def root(self):
         if self.parent is None:
@@ -146,9 +146,9 @@ class WindowDataGroup(WindowItem):
         if key not in self.children:
             if hasattr(self.proxy[key], 'keys'):
                 self.add_group(key=key)
-                return
             else:
                 self.add_dataset(key)
+            return
         if hasattr(self.children[key], 'update_data'): # Confusing to me...
             self.children[key].update_data()
 
@@ -263,6 +263,7 @@ class WindowMultiPlot(WindowItem):
 
 
 class WindowDataSet(WindowDataGroup, WindowPlot):
+    load = True
     """
     A WindowPlot which is kept in sync with a shared h5py DataSet
     :param name: TODO
@@ -276,10 +277,12 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         self.update_data()
 
     def update_data(self):
-        logger.debug('Updating data at %s' % self.strpath)
-        self.data = self.proxy[:]
-        if len(self.data) > 0:
-            self.set_data(self.data)
+        if self.load: # This is disabled on startup
+            logger.debug('Updating data at %s' % self.strpath)
+            print 'update', self.strpath
+            self.data = self.proxy[:]
+            if len(self.data) > 0:
+                self.set_data(self.data)
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
@@ -346,7 +349,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
         self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_actions)
         self.data_tree_widget.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
-        self.data_tree_widget.setColumnWidth(0, 90)
+        self.data_tree_widget.setColumnWidth(0, 150)
         self.data_tree_widget.setColumnWidth(1, 50)
         self.data_tree_widget.setColumnWidth(2, 50)
         self.data_tree_widget.setColumnWidth(3, 50)
@@ -417,12 +420,14 @@ class PlotWindow(Qt.QMainWindow):
         self.zbe.refresh_connection('tcp://%s:%d' % (addr, port))
         self.dataserver = objsh.helper.find_object('dataserver', no_cache=True)
         self.dataserver.connect('file-added', self.add_file)
+        WindowDataSet.load = False
         for filename, proxy in self.dataserver.list_files(names_only=False).items():
             self.add_file(filename, proxy)
+        WindowDataSet.load = True
         self.connected_status.setText('Connected to tcp://%s:%d' % (addr, port))
         self.connect_to_server_action.setEnabled(False)
         self.load_file_action.setEnabled(True)
-        #self.connection_checker.start(3000)
+        self.connection_checker.start(5000)
 
     def check_connection_status(self):
         try:
@@ -440,29 +445,6 @@ class PlotWindow(Qt.QMainWindow):
             WindowItem.registry[(filename,)].remove()
         WindowDataGroup(filename, None, proxy)
 
-#    def get_data_changed(self, filename, pathname):
-#        path = (filename,) + tuple(pathname.split('/')[1:])
-#        logger.debug('Data Changed at %s' % '/'.join(path))
-#        path = tuple(path)
-#        if path not in self.data_groups: # Then create it
-#            logger.debug('Path not found: %s' % '/'.join(path))
-#            logger.debug(repr(self.data_groups))
-#            if path[:-1] not in self.data_groups:
-#                self.add_group(path[:-1]) # Create parent if necessary
-#            parent = self.data_groups[path[:-1]]
-#            child = WindowDataSet(path[-1], parent)
-#            self.data_groups[path] = child
-#
-#        else:
-#            print 'Path found', path, 'updating...'
-#            self.data_groups[path].update_data()
-#
-#
-#    def get_attrs_changed(self, filename, pathname, attrs):
-#        logger.debug('Attrs received for %s %s' % (filename, pathname))
-#        path = (filename,) + tuple(pathname.split('/')[1:])
-#        self.data_groups[path].update_attrs(attrs)
-#
     ####################
     # Attribute Editor #
     ####################
@@ -513,17 +495,6 @@ class PlotWindow(Qt.QMainWindow):
             sources = [WindowItem.registry[path] for path in sourcepaths]
         WindowMultiPlot(sources, parametric)
 
-        #if parametric:
-        #    widget = ParametricItemWidget(selection[0].path, selection[1].path, self.dock_area)
-        #    self.parametric_widgets[paths] = widget
-        #else:
-        #    widget = MultiplotItemWidget('::'.join(paths), self.dock_area)
-        #    self.multiplot_widgets[paths] = widget
-        #widget.remove_button.clicked.connect(lambda: self.remove_multiplot(paths, parametric=parametric))
-        #for item in selection:
-        #    self.multiplots[item.strpath].append(widget)
-        #    #self.background_client.update_plot(item.path)
-
     def remove_multiplot(self, paths, parametric=False):
         if parametric:
             widget = self.parametric_widgets.pop(paths)
@@ -566,7 +537,11 @@ class PlotWindow(Qt.QMainWindow):
     def toggle_item(self, item, col, show=None):
         if item.is_leaf():# and item.plot:
             item = WindowItem.registry[item.path]
-            item.plot.toggle_hide(show=show)
+            if item.plot is None and isinstance(item, WindowDataSet):
+                item.load = True
+                item.update_data()
+            else:
+                item.plot.toggle_hide(show=show)
             item.update_tree_item(visible=item.plot.is_visible())
         else:
             for child in item.get_children():
