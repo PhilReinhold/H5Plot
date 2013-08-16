@@ -487,36 +487,31 @@ class CrosshairPlotWidget(pg.PlotWidget):
     def handle_mouse_move(self, mouse_event):
         if self.cross_section_enabled and self.search_mode:
             item = self.getPlotItem()
-            if len(item.items) == 0:
-                return
-            data_item = item.items[0] # TODO, search through items for closest match?
-            xdata, ydata = data_item.xData, data_item.yData
-
             vb = item.getViewBox()
             view_coords = vb.mapSceneToView(mouse_event)
             view_x, view_y = view_coords.x(), view_coords.y()
-            item_coords = item.mapFromScene(mouse_event)
-            item_x, item_y = item_coords.x(), item_coords.y()
-            #max_x, max_y = self.imageItem.image.shape
-            #if item_x < 0 or item_x > max_x or item_y < 0 or item_y > max_y:
-            #    return
-            if self.parametric:
-                index_distance = lambda i: (xdata[i]-view_x)**2 + (ydata[i] - view_y)**2
-                index = min(range(len(xdata)), key=index_distance)
-            else:
-                index = min(np.searchsorted(xdata, view_x), len(xdata)-1)
-                if index and xdata[index] - view_x > view_x - xdata[index - 1]:
-                    index -= 1
-            pt_x, pt_y = xdata[index], ydata[index]
 
+            best_guesses = []
+            for data_item in item.items:
+                if isinstance(data_item, pg.PlotDataItem):
+                    xdata, ydata = data_item.xData, data_item.yData
+                    index_distance = lambda i: (xdata[i]-view_x)**2 + (ydata[i] - view_y)**2
+                    if self.parametric:
+                        index = min(range(len(xdata)), key=index_distance)
+                    else:
+                        index = min(np.searchsorted(xdata, view_x), len(xdata)-1)
+                        if index and xdata[index] - view_x > view_x - xdata[index - 1]:
+                            index -= 1
+                    pt_x, pt_y = xdata[index], ydata[index]
+                    best_guesses.append(((pt_x, pt_y), index_distance(index)))
+
+            if not best_guesses:
+                return
+
+            (pt_x, pt_y), _ = min(best_guesses, key=lambda x: x[1])
             self.v_line.setPos(pt_x)
             self.h_line.setPos(pt_y)
             self.label.setText("x=%.2e, y=%.2e" % (pt_x, pt_y))
-            #self.getPlotItem().titleLabel.setText("x=%.2e, y=%.2e" % (pt_x, pt_y))
-            #(min_view_x, max_view_x), (min_view_y, max_view_y) = self.imageItem.getViewBox().viewRange()
-            #self.x_cross_index = max(min(int(item_x), max_x-1), 0)
-            #self.y_cross_index = max(min(int(item_y), max_y-1), 0)
-            #self.update_cross_section()
 
     def add_cross_hair(self):
         self.h_line = pg.InfiniteLine(angle=0, movable=False)

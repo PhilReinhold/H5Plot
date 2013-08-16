@@ -239,7 +239,7 @@ class WindowMultiPlot(WindowItem):
     def __init__(self, sources, parametric=False):
         self.sources = sources
         connector = " vs " if parametric else " :: "
-        name = connector.join(i.name for i in sources)
+        name = connector.join(i.strpath for i in sources)
 
         if ("multiplots",) not in WindowItem.registry:
             WindowItem("multiplots", None)
