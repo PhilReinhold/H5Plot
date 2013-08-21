@@ -69,18 +69,17 @@ class WindowItem(object):
             self.tree_item.setText(1, str(shape))
         if visible is not None:
             self.tree_item.setText(2, str(visible))
-        self.root().check_expand_state()
 
     def check_expand_state(self):
         for c in self.children.values():
             if isinstance(c, WindowPlot):
                 if c.plot and c.plot.is_visible():
-                    self.tree_item.setExpanded(True)
+                    self.tree_item.setExpanded(False)
                     return True
             elif c.check_expand_state():
-                self.tree_item.setExpanded(True)
+                self.tree_item.setExpanded(False)
                 return True
-        self.tree_item.setExpanded(False)
+        self.tree_item.setExpanded(True)
         return False
 
     def update_attrs(self, attrs):
@@ -271,9 +270,11 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
     :param proxy:
     :param attrs:
     """
-    def __init__(self, name, parent, **kwargs):
+    def __init__(self, name, parent, load=None, **kwargs):
         super(WindowDataSet, self).__init__(name, parent, **kwargs)
         logger.debug('Initializing WindowDataSet %s' % self.strpath)
+        if load is not None:
+            self.load = load
         self.update_data()
 
     def update_data(self):
@@ -443,7 +444,9 @@ class PlotWindow(Qt.QMainWindow):
             proxy = self.dataserver.get_file(filename)
         if (filename,) in WindowItem.registry:
             WindowItem.registry[(filename,)].remove()
+        WindowDataSet.load = False
         WindowDataGroup(filename, None, proxy)
+        WindowDataSet.load = True
 
     ####################
     # Attribute Editor #
@@ -546,6 +549,7 @@ class PlotWindow(Qt.QMainWindow):
         else:
             for child in item.get_children():
                 self.toggle_item(child, col, show)
+            WindowItem.registry[item.path].check_expand_state()
 
 
 #See http://stackoverflow.com/questions/2655354/how-to-allow-resizing-of-qmessagebox-in-pyqt4

@@ -267,7 +267,7 @@ class Rank1ItemWidget(ItemWidget):
                     raise ValueError('data claims to be parametric, but shape is ' + str(data.shape))
             else:
                 ydata = data
-                xdata = np.arange(x0, x0+(xscale*len(ydata)), xscale)
+                xdata = np.linspace(x0, x0+(xscale*len(ydata)), len(data))
 
         self.line_plt.plotItem.setLabels(bottom=(xlabel,), left=(ylabel,))
 
