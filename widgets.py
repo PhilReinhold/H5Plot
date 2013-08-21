@@ -23,6 +23,10 @@ class MyDockArea(pg.dockarea.DockArea):
         dock.setParent(None)
         dock.label.setParent(None)
         dock.label.hide()
+
+        if len(dock._container.children()) is 0 and dock._container is not self.topContainer:
+            dock._container.setParent(None)
+
         if self.insert_location == 'bottom':
             if dock is self.last_dock:
                 self.last_dock = self.second_last_dock
@@ -53,6 +57,12 @@ class MyDockArea(pg.dockarea.DockArea):
             self.addDock(dock, self.insert_location)
         self.insert_location = {'bottom':'right', 'right':'bottom'}[self.insert_location]
         self.second_last_dock, self.last_dock = self.last_dock, dock
+
+    def addContainer(self, typ, obj):
+        container = pg.dockarea.DockArea.addContainer(self, typ, obj)
+        if isinstance(container, Qt.QSplitter):
+            container.setChildrenCollapsible(False)
+        return container
 
 
 class NodeEditWidget(Qt.QFrame):
