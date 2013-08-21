@@ -588,17 +588,22 @@ class CrossSectionWidget(pg.ImageView):
         self.v_cross_section = self.v_cross_section_item.plot([])
         self.cs_layout.layout.setRowMaximumHeight(0, self.trace_size)
         self.cs_layout.layout.setColumnMaximumWidth(1, self.trace_size+20)
-        self.h_line = pg.InfiniteLine(angle=0, movable=False)
-        self.v_line = pg.InfiniteLine(angle=90, movable=False)
+        min_x, max_x, min_y, max_y = self.imageItem.image.shape
+        mid_x, mid_y = (max_x - min_x)/2., (max_y - min_y)/2.
+        self.h_line = pg.InfiniteLine(pos=mid_y, angle=0, movable=False)
+        self.v_line = pg.InfiniteLine(pos=mid_x, angle=90, movable=False)
         self.view.addItem(self.h_line, ignoreBounds=False)
         self.view.addItem(self.v_line, ignoreBounds=False)
         self.x_cross_index = 0
         self.y_cross_index = 0
         self.cross_section_enabled = True
+        self.label = pg.LabelItem(justify="right")
+        self.cs_layout.addItem(self.label, 2, 1)
 
     def hide_cross_section(self):
         self.cs_layout.layout.removeItem(self.h_cross_section_item)
         self.cs_layout.layout.removeItem(self.v_cross_section_item)
+        self.cs_layout.layout.removeItem(self.label)
         self.h_cross_section_item.close()
         self.v_cross_section_item.close()
         self.view.removeItem(self.h_line)
@@ -639,6 +644,7 @@ class CrossSectionWidget(pg.ImageView):
             self.x_cross_index = max(min(int(item_x), max_x-1), 0)
             self.y_cross_index = max(min(int(item_y), max_y-1), 0)
             self.update_cross_section()
+            self.label.setText("x=%.2e, y=%.2e" % (view_x, view_y))
 
     def update_cross_section(self):
         self.h_cross_section.setData(self.imageItem.image[:, self.y_cross_index])
