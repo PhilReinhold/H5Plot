@@ -58,13 +58,6 @@ class MyDockArea(pg.dockarea.DockArea):
         self.insert_location = {'bottom':'right', 'right':'bottom'}[self.insert_location]
         self.second_last_dock, self.last_dock = self.last_dock, dock
 
-    def addContainer(self, typ, obj):
-        container = pg.dockarea.DockArea.addContainer(self, typ, obj)
-        if isinstance(container, Qt.QSplitter):
-            container.setChildrenCollapsible(False)
-        return container
-
-
 class NodeEditWidget(Qt.QFrame):
     def __init__(self, path, attrs):
         Qt.QFrame.__init__(self)

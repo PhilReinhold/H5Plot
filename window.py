@@ -550,6 +550,7 @@ class PlotWindow(Qt.QMainWindow):
             for child in item.get_children():
                 self.toggle_item(child, col, show)
             WindowItem.registry[item.path].check_expand_state()
+        Qt.QApplication.instance().processEvents()
 
 
 #See http://stackoverflow.com/questions/2655354/how-to-allow-resizing-of-qmessagebox-in-pyqt4
