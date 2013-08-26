@@ -343,6 +343,9 @@ class PlotWindow(Qt.QMainWindow):
         self.sidebar.layout().addWidget(max_plots_widget)
 
         # Structure Tree
+        sidebar_splitter = Qt.QSplitter(Qt.Qt.Vertical)
+        self.sidebar.layout().addWidget(sidebar_splitter)
+
         self.data_tree_widget = Qt.QTreeWidget()
         self.data_tree_widget.setColumnCount(3)
         self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Visible?'])
@@ -355,7 +358,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget.setColumnWidth(2, 50)
         self.data_tree_widget.setColumnWidth(3, 50)
         WindowItem.data_tree_widget = self.data_tree_widget
-        self.sidebar.layout().addWidget(self.data_tree_widget)
+        sidebar_splitter.addWidget(self.data_tree_widget)
 
         # Structure Tree Context Menu
         self.multiplot_action = Qt.QAction('Create Multiplot', self)
@@ -380,7 +383,7 @@ class PlotWindow(Qt.QMainWindow):
         attrs_widget_box.setLayout(Qt.QVBoxLayout())
         WindowItem.attrs_widget_layout = attrs_widget_box.layout()
         self.current_edit_widget = None
-        self.sidebar.layout().addWidget(attrs_widget_box)
+        sidebar_splitter.addWidget(attrs_widget_box)
 
         # Status Bar
         self.connected_status = Qt.QLabel('Not Connected')
