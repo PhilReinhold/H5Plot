@@ -1,14 +1,13 @@
-from collections import defaultdict
-from copy import copy
 import warnings
+import time
 
 from PyQt4 import Qt
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
-from pyqtgraph.opengl.GLGraphicsItem import GLGraphicsItem
 import pyqtgraph.dockarea
 import numpy as np
-import time
+
+from window import WindowMultiPlot
 
 class MyDockArea(pg.dockarea.DockArea):
     def __init__(self, *args, **kwargs):
@@ -170,10 +169,14 @@ class ItemWidget(pg.dockarea.Dock):
                 break
             label_text = new_label_text
 
+        if ' :: ' in label_text and len(label_text) > 35:
+            label_text = 'multiplot'
+
+        pointSize = 14 if len(label_text) < 30 else 12
 
         pg.dockarea.Dock.__init__(self, label_text)
         self.timestamp = time.time()
-        self.label.setFont(Qt.QFont('Helvetica', pointSize=14))
+        self.label.setFont(Qt.QFont('Helvetica', pointSize=pointSize))
         self.ident = ident
         self.window_item = item
 
