@@ -57,6 +57,11 @@ class MyDockArea(pg.dockarea.DockArea):
         self.insert_location = {'bottom':'right', 'right':'bottom'}[self.insert_location]
         self.second_last_dock, self.last_dock = self.last_dock, dock
 
+    def hide_all_but(self, dock):
+        for d in self._docks.values():
+            if d is not dock:
+                self.remove_dock(d)
+
 class NodeEditWidget(Qt.QFrame):
     def __init__(self, path, attrs):
         Qt.QFrame.__init__(self)
@@ -196,11 +201,14 @@ class ItemWidget(pg.dockarea.Dock):
         self.buttons_widget.setLayout(Qt.QHBoxLayout())
         self.remove_button = Qt.QPushButton('Hide')
         self.remove_button.clicked.connect(self.toggle_hide)
+        self.maximize_button = Qt.QPushButton('Maximize')
+        self.maximize_button.clicked.connect(lambda: self.dock_area.hide_all_but(self))
         self.update_toggle = Qt.QCheckBox('Update')
         self.update_toggle.setChecked(True)
 
 
         self.buttons_widget.layout().addWidget(self.remove_button)
+        self.buttons_widget.layout().addWidget(self.maximize_button)
         self.buttons_widget.layout().addWidget(self.update_toggle)
         self.buttons_widget.setContentsMargins(0, 0, 0, 0)
         self.buttons_widget.layout().setContentsMargins(0, 0, 0, 0)
