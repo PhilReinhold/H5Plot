@@ -600,7 +600,7 @@ class CrossSectionWidget(pg.ImageView):
         self.cs_layout.layout.setColumnMaximumWidth(1, self.trace_size+20)
         if self.imageItem.image is not None:
             (min_x, max_x), (min_y, max_y) = self.imageItem.getViewBox().viewRange()
-            mid_x, mid_y = (max_x - min_x)/2., (max_y - min_y)/2.
+            mid_x, mid_y = (max_x + min_x)/2., (max_y + min_y)/2.
         else:
             mid_x, mid_y = 0, 0
         self.h_line = pg.InfiniteLine(pos=mid_y, angle=0, movable=False)
