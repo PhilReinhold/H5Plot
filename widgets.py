@@ -74,7 +74,7 @@ class NodeEditWidget(Qt.QFrame):
         self.attr_list.setHeaderLabels(['Name', 'Value', 'Type'])
 
         for attr, value in attrs.items():
-            self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([attr, str(value), str(type(value))]))
+            self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([attr, self.repr_value(value), str(type(value))]))
 
         add_attr_box = Qt.QWidget()
         add_attr_box.setLayout(Qt.QHBoxLayout())
@@ -98,17 +98,23 @@ class NodeEditWidget(Qt.QFrame):
 
         self.attr_list_items = {}
 
+    def repr_value(self, v):
+        if isinstance(v, float) and v > 1e4:
+            return '%.2e' % v
+        else:
+            return str(v)
+
     def set_proxy(self, proxy):
         self.proxy = proxy
 
     def update_attrs(self, attrs):
         for k, v in attrs.items():
             if k not in self.attr_list_items:
-                item = Qt.QTreeWidgetItem([k, str(v), str(type(v))])
+                item = Qt.QTreeWidgetItem([k, self.repr_value(v), str(type(v))])
                 self.attr_list_items[k] = item
                 self.attr_list.addTopLevelItem(item)
             else:
-                self.attr_list_items[k].setText(1, str(v))
+                self.attr_list_items[k].setText(1, self.repr_value(v))
                 self.attr_list_items[k].setText(2, str(type(v)))
 
     def check_attr_name(self, name):
@@ -147,7 +153,7 @@ class NodeEditWidget(Qt.QFrame):
             self.proxy.set_attrs(**{name: value})
         else:
             if self.new_attr:
-                self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, str(value), str(type(value))]))
+                self.attr_list.addTopLevelItem(Qt.QTreeWidgetItem([name, self.repr_value(value), str(type(value))]))
             else:
                 i = self.attr_list.findItems(name, Qt.Qt.MatchExactly, 0)[0]
                 i.setText(1, str(value))
