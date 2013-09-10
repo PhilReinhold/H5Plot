@@ -349,7 +349,7 @@ class PlotWindow(Qt.QMainWindow):
         self.data_tree_widget = Qt.QTreeWidget()
         self.data_tree_widget.setColumnCount(3)
         self.data_tree_widget.setHeaderLabels(['Name', 'Shape', 'Visible?'])
-        self.data_tree_widget.itemClicked.connect(self.change_edit_widget)
+        self.data_tree_widget.itemSelectionChanged.connect(self.change_edit_widget)
         self.data_tree_widget.itemDoubleClicked.connect(self.toggle_item)
         self.data_tree_widget.itemSelectionChanged.connect(self.configure_tree_actions)
         self.data_tree_widget.setSelectionMode(Qt.QAbstractItemView.ExtendedSelection)
@@ -455,7 +455,13 @@ class PlotWindow(Qt.QMainWindow):
     # Attribute Editor #
     ####################
 
-    def change_edit_widget(self, item, col):
+    def change_edit_widget(self, item=None, col=None):
+        if item is None:
+            items = self.data_tree_widget.selectedItems()
+            if not items:
+                return
+            item = items[0]
+
         logger.debug('Changing edit widget to %s' % item.strpath)
         if self.current_edit_widget is not None:
             self.current_edit_widget.hide()
