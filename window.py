@@ -141,7 +141,7 @@ class WindowDataGroup(WindowItem):
     def is_dataset(self):
         return isinstance(self, WindowDataSet)
 
-    def update_child(self, key):
+    def update_child(self, key, slice=None):
         if key not in self.children:
             if hasattr(self.proxy[key], 'keys'):
                 self.add_group(key=key)
@@ -149,7 +149,7 @@ class WindowDataGroup(WindowItem):
                 self.add_dataset(key)
             return
         if hasattr(self.children[key], 'update_data'): # Confusing to me...
-            self.children[key].update_data()
+            self.children[key].update_data(slice)
 
     def add_group(self, key):
         path = self.path + (key,)
@@ -275,15 +275,34 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
         logger.debug('Initializing WindowDataSet %s' % self.strpath)
         if load is not None:
             self.load = load
+        self.proxy.connect('resize', self.resize_data)
         self.update_data()
 
-    def update_data(self):
+    def update_data(self, slice=None):
         if self.load: # This is disabled on startup
             logger.debug('Updating data at %s' % self.strpath)
             print 'update', self.strpath
-            self.data = self.proxy[:]
+            if self.data is None or slice is None:
+                self.data = self.proxy[:]
+            else:
+                self.data[slice] = self.proxy[slice]
             if len(self.data) > 0:
                 self.set_data(self.data)
+
+    def resize_data(self, new_shape):
+        print 'resize', new_shape
+        if self.data is None:
+            self.data = np.zeros(new_shape)
+            return
+        if new_shape[0] > self.data.shape[0]:
+            delta = list(self.data.shape)
+            delta[0] = new_shape[0] - self.data.shape[0]
+            self.data = np.concatenate((self.data, np.zeros(delta)))
+        if len(new_shape) > 1:
+            if new_shape[1] > self.data.shape[1]:
+                delta = list(self.data.shape)
+                delta[1] = new_shape[1] - self.data.shape[1]
+                self.data = np.hstack((self.data, np.zeros(delta)))
 
     def update_attrs(self, attrs):
         super(WindowDataSet, self).update_attrs(attrs)
