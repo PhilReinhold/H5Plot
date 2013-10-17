@@ -1,7 +1,7 @@
 from dataserver import get_file
 from demo_helpers import *
 
-f = get_file('updating_test.h5', timestamp_group=True)
+f = get_file('updating_test.h5').get_numbered_child()
 for _ in range(20):
     print "Enter to Step",
     raw_input()

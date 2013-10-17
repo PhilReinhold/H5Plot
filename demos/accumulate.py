@@ -2,7 +2,8 @@ import numpy as np
 from dataserver import get_file
 from demo_helpers import generate_rank1_data, generate_rank2_data
 
-f = get_file('accumulating_test.h5', timestamp_group=True)
+f = get_file('accumulating_test.h5').get_numbered_child()
+
 
 f.create_dataset('line', rank=1)
 f.create_dataset('img', rank=2)

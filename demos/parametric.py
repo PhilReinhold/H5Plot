@@ -4,7 +4,7 @@ from demo_helpers import generate_rank1_data
 
 # TODO, make scatter
 
-f = get_file('parametric_test.h5', timestamp_group=True)
+f = get_file('parametric_test.h5').get_numbered_child()
 f.create_dataset('random walk', rank=2)
 #f.create_dataset('3d random walk', rank=2)
 f['random walk'].set_attrs(parametric=True)
