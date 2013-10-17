@@ -21,6 +21,10 @@ class MyDockArea(pg.dockarea.DockArea):
     def remove_dock(self, dock):
         dock.setParent(None)
         dock.label.setParent(None)
+
+        if not isinstance(dock, ItemWidget):
+            return
+
         dock.label.hide()
 
         if len(dock._container.children()) is 0 and dock._container is not self.topContainer:
@@ -34,6 +38,10 @@ class MyDockArea(pg.dockarea.DockArea):
                 self.insert_location = 'right'
         elif dock is self.last_dock:
                 self.insert_location = 'bottom'
+
+        if isinstance(dock, Rank2ItemWidget):
+            if dock.img_view.cross_section_enabled:
+                dock.img_view.hide_cross_section()
 
         self._docks.pop(dock.ident)
         dock.window_item.update_tree_item(visible=False)
@@ -550,19 +558,12 @@ class CrosshairPlotWidget(pg.PlotWidget):
         self.removeItem(self.v_line)
         self.cross_section_enabled = False
 
-
 class CrossSectionWidget(pg.ImageView):
     def __init__(self, trace_size=80, **kwargs):
         view = pg.PlotItem(labels=kwargs.pop('labels', None))
-        self.trace_size = trace_size
         pg.ImageView.__init__(self, view=view, **kwargs)
         view.setAspectLocked(lock=False)
-        self.cs_layout = pg.GraphicsLayout()
-        self.cs_layout.addItem(view, row=1, col=0)
-        self.ui.graphicsView.setCentralItem(self.cs_layout)
         self.cross_section_enabled = False
-        self.add_cross_section()
-        self.hide_cross_section()
         self.search_mode = False
         self.signals_connected = False
         self.set_histogram(False)
@@ -572,11 +573,36 @@ class CrossSectionWidget(pg.ImageView):
         except RuntimeError:
             warnings.warn('Scene not set up, cross section signals not connected')
 
+
+        self.y_cross_index = 0
+        self.h_cross_dock = pyqtgraph.dockarea.Dock('x trace')
+        self.h_cross_section_widget = CrosshairPlotWidget()
+        self.h_cross_section_widget.add_cross_hair()
+        self.h_cross_section_widget.search_mode = False
+        self.h_cross_section_widget_data = self.h_cross_section_widget.plot([0,0])
+        self.h_cross_dock.addWidget(self.h_cross_section_widget)
+
+        self.x_cross_index = 0
+        self.v_cross_dock = pyqtgraph.dockarea.Dock('y trace')
+        self.v_cross_section_widget = CrosshairPlotWidget()
+        self.v_cross_section_widget.add_cross_hair()
+        self.v_cross_section_widget.search_mode = False
+        self.v_cross_section_widget_data = self.v_cross_section_widget.plot([0,0])
+        self.v_cross_dock.addWidget(self.v_cross_section_widget)
+
     def setLabels(self, xlabel="X", ylabel="Y", zlabel="Z"):
         self.view.setLabels(bottom=(xlabel,), left=(ylabel,))
+        self.h_cross_section_widget.plotItem.setLabels(bottom=xlabel, left=zlabel)
+        self.v_cross_section_widget.setLabels(bottom=ylabel, left=zlabel)
+        #self.setLabels(xlabel, ylabel)
         self.ui.histogram.item.axis.setLabel(text=zlabel)
 
     def setImage(self, *args, **kwargs):
+        if 'pos' in kwargs:
+            self._x0, self._y0 = kwargs['pos']
+        if 'scale' in kwargs:
+            self._xscale, self._yscale = kwargs['scale']
+
         pg.ImageView.setImage(self, *args, **kwargs)
         self.update_cross_section()
 
@@ -592,12 +618,6 @@ class CrossSectionWidget(pg.ImageView):
         self.ui.normBtn.setVisible(visible)
 
     def add_cross_section(self):
-        self.h_cross_section_item = self.cs_layout.addPlot(row=0, col=0)
-        self.v_cross_section_item = self.cs_layout.addPlot(row=1, col=1)
-        self.h_cross_section = self.h_cross_section_item.plot([])
-        self.v_cross_section = self.v_cross_section_item.plot([])
-        self.cs_layout.layout.setRowMaximumHeight(0, self.trace_size)
-        self.cs_layout.layout.setColumnMaximumWidth(1, self.trace_size+20)
         if self.imageItem.image is not None:
             (min_x, max_x), (min_y, max_y) = self.imageItem.getViewBox().viewRange()
             mid_x, mid_y = (max_x + min_x)/2., (max_y + min_y)/2.
@@ -611,18 +631,20 @@ class CrossSectionWidget(pg.ImageView):
         self.y_cross_index = 0
         self.cross_section_enabled = True
         self.label = pg.LabelItem(justify="right")
-        self.cs_layout.addItem(self.label, 2, 1)
+        #self.cs_layout.addItem(self.label, 2, 1) #TODO: Find a way of displaying this label
         self.search_mode = True
 
+        ItemWidget.dock_area.addDock(self.h_cross_dock)
+        ItemWidget.dock_area.addDock(self.v_cross_dock, position='right', relativeTo=self.h_cross_dock)
+
+
     def hide_cross_section(self):
-        self.cs_layout.layout.removeItem(self.h_cross_section_item)
-        self.cs_layout.layout.removeItem(self.v_cross_section_item)
-        self.cs_layout.layout.removeItem(self.label)
-        self.h_cross_section_item.close()
-        self.v_cross_section_item.close()
         self.view.removeItem(self.h_line)
         self.view.removeItem(self.v_line)
         self.cross_section_enabled = False
+
+        ItemWidget.dock_area.remove_dock(self.h_cross_dock)
+        ItemWidget.dock_area.remove_dock(self.v_cross_dock)
 
     def connect_signal(self):
         """This can only be run after the item has been embedded in a scene"""
@@ -661,8 +683,17 @@ class CrossSectionWidget(pg.ImageView):
             self.label.setText("x=%.2e, y=%.2e" % (view_x, view_y))
 
     def update_cross_section(self):
-        self.h_cross_section.setData(self.imageItem.image[:, self.y_cross_index])
-        self.v_cross_section.setData(self.imageItem.image[self.x_cross_index, :], range(self.imageItem.image.shape[1]))
+        nx, ny = self.imageItem.image.shape
+        x0, y0, xscale, yscale = self._x0, self._y0, self._xscale, self._yscale
+        xdata = np.linspace(x0, x0+(xscale*(nx-1)), nx)
+        ydata = np.linspace(y0, y0+(yscale*(ny-1)), ny)
+        zval = self.imageItem.image[self.x_cross_index, self.y_cross_index]
+        self.h_cross_section_widget_data.setData(xdata, self.imageItem.image[:, self.y_cross_index])
+        self.h_cross_section_widget.v_line.setPos(xdata[self.x_cross_index])
+        self.h_cross_section_widget.h_line.setPos(zval)
+        self.v_cross_section_widget_data.setData(ydata, self.imageItem.image[self.x_cross_index, :])
+        self.v_cross_section_widget.v_line.setPos(ydata[self.y_cross_index])
+        self.v_cross_section_widget.h_line.setPos(zval)
 
 def random_color(base=50):
     'A whitish random color. Adjust whiteness up by increasing base'
