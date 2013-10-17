@@ -1,4 +1,5 @@
 import time
+import os
 from PyQt4 import Qt
 from widgets import *
 import objectsharer as objsh
@@ -18,6 +19,8 @@ logger.addHandler(handler)
 from dataserver import DATA_DIRECTORY
 h5file_directory = DATA_DIRECTORY
 h5file_filter = 'HDF5 Files (*.h5)'
+
+objsh.DEFAULT_TIMEOUT = 10000
 
 
 class WindowItem(object):
@@ -53,7 +56,7 @@ class WindowItem(object):
             self.data_tree_widget.addTopLevelItem(self.tree_item)
         else:
             parent.tree_item.addChild(self.tree_item)
-            #parent.tree_item.setExpanded(True)
+        self.data_tree_widget.resizeColumnToContents(0)
 
     def root(self):
         if self.parent is None:
@@ -87,8 +90,15 @@ class WindowItem(object):
         self.attrs_widget.update_attrs(attrs)
 
     def remove(self):
+        if self.parent is not None:
+            idx = self.tree_item.parent().indexOfChild(self.tree_item)
+            self.tree_item.parent().takeChild(idx)
+        else:
+            idx = self.data_tree_widget.indexOfTopLevelItem(self.tree_item)
+            self.data_tree_widget.takeTopLevelItem(idx)
         del self.tree_item
         del self.attrs_widget
+        del WindowItem.registry[self.path]
 
 
 class DataTreeWidgetItem(Qt.QTreeWidgetItem):
@@ -163,7 +173,13 @@ class WindowDataGroup(WindowItem):
             g.update_child(key)
 
     def add_dataset(self, key):
-        WindowDataSet(key, self)
+        return WindowDataSet(key, self)
+
+    def remove(self):
+        if not self.is_dataset():
+            for c in self.children.values():
+                c.remove()
+        super(WindowDataGroup, self).remove()
 
 class WindowPlot(WindowItem):
     """
@@ -228,11 +244,12 @@ class WindowPlot(WindowItem):
             return len(self.data.shape)
 
     def remove(self):
-        super(WindowPlot, self).remove()
         objsh.helper.unregister(self)
-        if self.plot.is_visible():
-            self.plot.toggle_hide()
-        del self.plot
+        if self.plot is not None:
+            if self.plot.is_visible():
+                self.plot.toggle_hide()
+            del self.plot
+        super(WindowPlot, self).remove()
 
 class WindowMultiPlot(WindowItem):
     def __init__(self, sources, parametric=False):
@@ -290,9 +307,8 @@ class WindowDataSet(WindowDataGroup, WindowPlot):
                 self.set_data(self.data)
 
     def resize_data(self, new_shape):
-        print 'resize', new_shape
         if self.data is None:
-            self.data = np.zeros(new_shape)
+            self.update_data()
             return
         if new_shape[0] > self.data.shape[0]:
             delta = list(self.data.shape)
@@ -464,6 +480,8 @@ class PlotWindow(Qt.QMainWindow):
     def add_file(self, filename, proxy=None):
         if proxy is None:
             proxy = self.dataserver.get_file(filename)
+        if os.path.dirname(filename) == h5file_directory:
+            filename = os.path.basename(filename)
         if (filename,) in WindowItem.registry:
             WindowItem.registry[(filename,)].remove()
         WindowDataSet.load = False
@@ -551,15 +569,6 @@ class PlotWindow(Qt.QMainWindow):
         self.multiplot_action.setEnabled(multiplot)
         self.parametric_action.setEnabled(parametric)
 
-    #def remove_selection(self):
-    #    for item in self.structure_tree.selectedItems():
-    #        # This is a little complicated. We need to remove the data from the background.
-    #        # Removing it from the background, however, can also be done through a client.
-    #        # Removing it from a client should trigger removal of the plots from the window.
-    #        # Therefore, the chain of control in this command is
-    #        # Window.remove_selection --> Background.remove_item --> Window.remove_item
-    #        # Sorry.
-    #        self.background_client.remove_item(item.path)
 
     def toggle_selection(self, show=None):
         for item in self.data_tree_widget.selectedItems():
@@ -571,6 +580,8 @@ class PlotWindow(Qt.QMainWindow):
             if item.plot is None and isinstance(item, WindowDataSet):
                 item.load = True
                 item.update_data()
+                if item.plot is None:
+                    raise Exception("Dataset is empty")
             else:
                 item.plot.toggle_hide(show=show)
             item.update_tree_item(visible=item.plot.is_visible())
