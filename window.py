@@ -411,7 +411,23 @@ class PlotWindow(Qt.QMainWindow):
         self.hide_subtree_action = Qt.QAction('Hide Subtree', self)
         self.hide_subtree_action.triggered.connect(lambda: self.toggle_selection(show=False))
         self.data_tree_widget.addAction(self.hide_subtree_action)
+
+        self.delete_item_action = Qt.QAction('Delete item', self)
+        self.delete_item_action.triggered.connect(lambda: self.delete_item())
+        self.data_tree_widget.addAction(self.delete_item_action)
+
+        self.close_item_action = Qt.QAction('Close file', self)
+        self.close_item_action.triggered.connect(lambda: self.delete_item())
+        self.data_tree_widget.addAction(self.close_item_action)
+
+        self.rename_item_action = Qt.QAction('Rename item', self)
+        self.rename_item_action.triggered.connect(self.rename_item)
+        self.data_tree_widget.addAction(self.rename_item_action)
+
         self.data_tree_widget.setContextMenuPolicy(Qt.Qt.ActionsContextMenu)
+        self.data_tree_widget.itemCollapsed.connect(lambda: self.data_tree_widget.resizeColumnToContents(0))
+        self.data_tree_widget.itemExpanded.connect(lambda: self.data_tree_widget.resizeColumnToContents(0))
+
 
         # Attribute Editor Area
         attrs_widget_box = Qt.QWidget()
@@ -488,6 +504,29 @@ class PlotWindow(Qt.QMainWindow):
         WindowDataGroup(filename, None, proxy)
         WindowDataSet.load = True
 
+    def delete_item(self, item=None):
+        if item is None:
+            item = self.data_tree_widget.selectedItems()[0]
+        if isinstance(item, DataTreeWidgetItem):
+            item = WindowItem.registry[item.path]
+        if item.parent is not None:
+            del item.parent.proxy[item.name]
+        else:
+            self.dataserver.remove_file(item.name)
+        item.remove()
+
+    def rename_item(self):
+        item = self.data_tree_widget.selectedItems()[0]
+        item = WindowItem.registry[item.path]
+        new_name, ok = Qt.QInputDialog.getText(self, "Renaming %s" % item.name, "New Name", Qt.QLineEdit.Normal, item.name)
+        new_name = str(new_name)
+        if ok and new_name and (new_name != item.name):
+            if item.parent is not None:
+                item.parent.proxy[new_name] = item.proxy
+                self.delete_item(item)
+            else:
+                pass
+
     ####################
     # Attribute Editor #
     ####################
@@ -560,14 +599,19 @@ class PlotWindow(Qt.QMainWindow):
     def configure_tree_actions(self):
         selection = self.data_tree_widget.selectedItems()
         multiplot = len(selection) > 1
-        multiplot = multiplot and all(i.is_leaf() for i in selection)
-        multiplot = multiplot and all(WindowItem.registry[i.path].rank == 1 for i in selection)
+        multiplot = multiplot and all(isinstance(WindowItem.registry[i.path], WindowDataSet) for i in selection)
+        multiplot = multiplot and all(WindowItem.registry[i.path].plot.rank == 1 for i in selection)
         parametric = multiplot and len(selection) == 2
         #if parametric:
         #    item1, item2 = [WindowItem.registry[i.path] for i in selection]
         #    parametric = parametric and item1.data.shape[0] == item2.data.shape[0]
         self.multiplot_action.setEnabled(multiplot)
         self.parametric_action.setEnabled(parametric)
+        is_file = all(i.parent() is None for i in selection)
+        is_group = all(i.parent() is not None for i in selection)
+        self.delete_item_action.setEnabled(len(selection) >= 1 and is_group)
+        self.close_item_action.setEnabled(len(selection) >= 1 and is_file)
+        self.rename_item_action.setEnabled(len(selection) == 1)
 
 
     def toggle_selection(self, show=None):
