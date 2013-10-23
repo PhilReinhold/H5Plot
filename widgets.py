@@ -344,7 +344,7 @@ class ParametricItemWidget(Rank1ItemWidget):
         attrs['xlabel'] = '/'.join(self.path1)
         attrs['ylabel'] = '/'.join(self.path2)
         if self.transpose_toggle.isChecked():
-            data = np.transpose(data)
+            data = np.transpose(np.array([data[:, 1], data[:, 0]]))
             attrs['xlabel'], attrs['ylabel'] = attrs['ylabel'], attrs['xlabel']
         self.update_plot(data, attrs)
 
