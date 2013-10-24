@@ -355,43 +355,65 @@ class Rank2ItemWidget(Rank1ItemWidget):
                   "y0", "yscale",
                   "xlabel", "ylabel", "zlabel",
                   "parametric", "plot_args"]
+
     def __init__(self, item, **kwargs):
         Rank1ItemWidget.__init__(self, item, **kwargs)
 
         self.histogram_check = Qt.QCheckBox('Histogram')
         self.histogram_check.stateChanged.connect(self.img_view.set_histogram)
+        self.autolevels_check = Qt.QCheckBox('Autolevels')
+        self.autolevels_check.setChecked(True)
+        self.autolevels_check.stateChanged.connect(lambda s: self.update_plot(self.cur_data, self.cur_attrs))
+        self.img_widgets = [self.histogram_check, self.autolevels_check]
+        self.most_recent_check = Qt.QCheckBox('Most Recent')
+        self.most_recent_check.setChecked(True)
+        self.line_scrubber = Qt.QSlider(Qt.Qt.Horizontal)
+        self.line_scrubber.valueChanged.connect(self.set_line)
+        self.line_widgets = [self.most_recent_check, self.line_scrubber]
 
         img_radio = Qt.QRadioButton("Image")
         img_radio.clicked.connect(self.show_img_plot)
+        img_radio.setChecked(True)
         gl_radio = Qt.QRadioButton("Surface")
         gl_radio.clicked.connect(self.show_gl_plot)
         line_radio = Qt.QRadioButton("Last Line")
         line_radio.clicked.connect(self.show_line_plot)
-        self.buttons_widget.layout().addWidget(self.histogram_check)
+
+        for widget in self.img_widgets + self.line_widgets:
+            self.buttons_widget.layout().addWidget(widget)
+
+        for widget in self.line_widgets:
+            widget.hide()
+
         self.buttons_widget.layout().addWidget(img_radio)
         self.buttons_widget.layout().addWidget(gl_radio)
         self.buttons_widget.layout().addWidget(line_radio)
 
-        #self.recent_button = Qt.QPushButton('Most Recent Trace')
-        #self.recent_button.clicked.connect(self.show_recent)
-        #self.accum_button = Qt.QPushButton('Accumulated Traces')
-        #self.accum_button.clicked.connect(self.show_accumulated)
-        #self.accum_button.hide()
+        self.cur_data = None
+        self.cur_attrs = {}
 
-        #self.buttons_widget.layout().addWidget(self.recent_button)
-        #self.buttons_widget.layout().addWidget(self.accum_button)
+    def set_line(self, value):
+        print 'set line', value
+        if self.cur_data is not None:
+            Rank1ItemWidget.update_plot(self, self.cur_data[value, :], self.cur_attrs)
 
     def show_img_plot(self):
+        self.img_view.show()
         self.line_plt.hide()
         if self.gl_view is not None:
             self.gl_view.hide()
-        self.img_view.show()
-        self.histogram_check.show()
+
+        for widget in self.img_widgets:
+            widget.show()
+        for widget in self.line_widgets:
+            widget.hide()
 
     def show_gl_plot(self):
         self.line_plt.hide()
         self.img_view.hide()
-        self.histogram_check.hide()
+        for widget in self.img_widgets + self.line_widgets:
+            widget.hide()
+
         if self.gl_view is None:
             self.gl_view = gl.GLViewWidget()
             self.gl_view.setSizePolicy(Qt.QSizePolicy.Expanding, Qt.QSizePolicy.Expanding)
@@ -402,11 +424,14 @@ class Rank2ItemWidget(Rank1ItemWidget):
 
     def show_line_plot(self):
         self.img_view.hide()
-        self.histogram_check.hide()
         if self.gl_view is not None:
             self.gl_view.hide()
         self.line_plt.show()
 
+        for widget in self.line_widgets:
+            widget.show()
+        for widget in self.img_widgets:
+            widget.hide()
 
     def add_plot_widget(self, **kwargs):
         Rank1ItemWidget.add_plot_widget(self)
@@ -421,7 +446,6 @@ class Rank2ItemWidget(Rank1ItemWidget):
         self.surface = None
 
     def update_plot(self, data, attrs=None):
-        super(Rank2ItemWidget, self).update_plot(data[-1, :], attrs)
         if attrs is None:
             attrs = {}
 
@@ -434,17 +458,25 @@ class Rank2ItemWidget(Rank1ItemWidget):
         zlabel = attrs.get("zlabel", "Z")
         plot_args = attrs.get("plot_args", {})
 
+        self.cur_data = data
+        self.cur_attrs = attrs
+
         if data is None:
             self.clear_plot()
             return
 
         if self.update_toggle.isChecked():
+
+            self.line_scrubber.setMaximum(len(data)-1)
+
             self.img_view.setLabels(xlabel, ylabel, zlabel)
-            Rank1ItemWidget.update_plot(self, data[-1,:], attrs)
+            if self.most_recent_check.isChecked():
+                self.line_scrubber.setValue(len(data)-1) # This updates the line plot
 
             # Well, this is a hack. I'm not sure why autorange is disabled after setImage
             autorange = self.img_view.getView().vb.autoRangeEnabled()[0]
-            self.img_view.setImage(data, autoRange=autorange, pos=[x0, y0], scale=[xscale, yscale])
+            autolevels = self.autolevels_check.isChecked()
+            self.img_view.setImage(data, autoRange=autorange, autoLevels=autolevels, pos=[x0, y0], scale=[xscale, yscale])
             self.img_view.getView().vb.enableAutoRange(enable=autorange)
 
             if self.gl_view is not None:
