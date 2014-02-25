@@ -1,3 +1,6 @@
+Deprecated in favor of [liveplot](http://github.com/PhilReinhold/liveplot) for on the fly plotting and [H5Explore](http://github.com/PhilReinhold/H5Explore) for hdf5 dataset visualization.
+---
+
 H5Plot
 ======
 
